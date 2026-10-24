@@ -19,6 +19,7 @@ public class IntegrationSyncService {
 
     private final IntegrationClient integrationClient;
     private final OperationImportService operationImportService;
+    private final RecalcJournalService recalcJournalService;
 
     @Async
     public void syncInnsAsync(Collection<String> inns) {
@@ -37,6 +38,13 @@ public class IntegrationSyncService {
                 List<OperationDto> operations = integrationClient.fetchOperations(source, inn);
                 ImportResult result = operationImportService.upsertBatch(inn, source, operations);
                 total = total.merge(result);
+                if (result.getInserted() > 0 || result.getDuplicates() > 0) {
+                    recalcJournalService.record(
+                            inn,
+                            "Синхронизация " + source.getCode() + ": +" + result.getInserted()
+                                    + ", дублей " + result.getDuplicates()
+                    );
+                }
                 log.info("Synced {} for INN {}: inserted={}, duplicates={}, invalid={}",
                         source, inn, result.getInserted(), result.getDuplicates(), result.getInvalid());
             } catch (Exception ex) {

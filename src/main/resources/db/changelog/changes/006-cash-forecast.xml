@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <changeSet id="006-create-cash-events" author="hackathon">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <tableExists tableName="cash_events"/>
+            </not>
+        </preConditions>
+        <createTable tableName="cash_events">
+            <column name="id" type="BIGSERIAL">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="company_inn" type="VARCHAR(20)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="event_date" type="DATE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="title" type="VARCHAR(500)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="direction" type="VARCHAR(20)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="amount" type="NUMERIC(18,2)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="category" type="VARCHAR(255)"/>
+            <column name="status" type="VARCHAR(20)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="source" type="VARCHAR(50)"/>
+            <column name="operation_id" type="BIGINT"/>
+            <column name="created_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <createIndex tableName="cash_events" indexName="idx_cash_events_inn_date">
+            <column name="company_inn"/>
+            <column name="event_date"/>
+        </createIndex>
+        <addForeignKeyConstraint
+                baseTableName="cash_events"
+                baseColumnNames="company_inn"
+                referencedTableName="companies"
+                referencedColumnNames="inn"
+                constraintName="fk_cash_events_company"/>
+    </changeSet>
+
+    <changeSet id="006-create-forecast-scenarios" author="hackathon">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <tableExists tableName="forecast_scenarios"/>
+            </not>
+        </preConditions>
+        <createTable tableName="forecast_scenarios">
+            <column name="id" type="BIGSERIAL">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="company_inn" type="VARCHAR(20)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="user_id" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="name" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="conditions_json" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <createIndex tableName="forecast_scenarios" indexName="idx_forecast_scenarios_inn_user">
+            <column name="company_inn"/>
+            <column name="user_id"/>
+        </createIndex>
+        <addForeignKeyConstraint
+                baseTableName="forecast_scenarios"
+                baseColumnNames="company_inn"
+                referencedTableName="companies"
+                referencedColumnNames="inn"
+                constraintName="fk_forecast_scenarios_company"/>
+        <addForeignKeyConstraint
+                baseTableName="forecast_scenarios"
+                baseColumnNames="user_id"
+                referencedTableName="users"
+                referencedColumnNames="id"
+                constraintName="fk_forecast_scenarios_user"/>
+    </changeSet>
+
+    <changeSet id="006-create-forecast-settings" author="hackathon">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <tableExists tableName="forecast_settings"/>
+            </not>
+        </preConditions>
+        <createTable tableName="forecast_settings">
+            <column name="company_inn" type="VARCHAR(20)">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="min_balance" type="NUMERIC(18,2)"/>
+            <column name="salary_day" type="INT"/>
+            <column name="caution_level" type="VARCHAR(50)"/>
+            <column name="notify_rules_json" type="TEXT"/>
+            <column name="updated_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addForeignKeyConstraint
+                baseTableName="forecast_settings"
+                baseColumnNames="company_inn"
+                referencedTableName="companies"
+                referencedColumnNames="inn"
+                constraintName="fk_forecast_settings_company"/>
+    </changeSet>
+
+    <changeSet id="006-create-recalc-journal" author="hackathon">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <tableExists tableName="recalc_journal"/>
+            </not>
+        </preConditions>
+        <createTable tableName="recalc_journal">
+            <column name="id" type="BIGSERIAL">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="company_inn" type="VARCHAR(20)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="occurred_at" type="TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="message" type="VARCHAR(1000)">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <createIndex tableName="recalc_journal" indexName="idx_recalc_journal_inn_at">
+            <column name="company_inn"/>
+            <column name="occurred_at"/>
+        </createIndex>
+        <addForeignKeyConstraint
+                baseTableName="recalc_journal"
+                baseColumnNames="company_inn"
+                referencedTableName="companies"
+                referencedColumnNames="inn"
+                constraintName="fk_recalc_journal_company"/>
+    </changeSet>
+
+</databaseChangeLog>

@@ -10,5 +10,6 @@
     <include file="db/changelog/changes/003-user-fio-and-inns.xml" relativeToChangelogFile="false"/>
     <include file="db/changelog/changes/004-companies-and-operations.xml" relativeToChangelogFile="false"/>
     <include file="db/changelog/changes/005-widen-inn.xml" relativeToChangelogFile="false"/>
+    <include file="db/changelog/changes/006-cash-forecast.xml" relativeToChangelogFile="false"/>
 
 </databaseChangeLog>

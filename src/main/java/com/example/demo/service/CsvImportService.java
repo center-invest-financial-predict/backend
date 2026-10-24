@@ -30,6 +30,7 @@ public class CsvImportService {
     private final OperationImportService operationImportService;
     private final CompanyRepository companyRepository;
     private final CustomUserDetailsService userDetailsService;
+    private final RecalcJournalService recalcJournalService;
 
     /**
      * Import CSV that may contain many company INNs / company_ids.
@@ -88,6 +89,12 @@ public class CsvImportService {
         for (Map.Entry<String, List<OperationDto>> entry : byInn.entrySet()) {
             ImportResult part = operationImportService.upsertBatch(entry.getKey(), OperationSource.CSV, entry.getValue());
             total = total.merge(part);
+            if (part.getInserted() > 0 || part.getDuplicates() > 0) {
+                recalcJournalService.record(
+                        entry.getKey(),
+                        "Загружена выписка CSV: +" + part.getInserted() + ", дублей " + part.getDuplicates()
+                );
+            }
         }
         return total;
     }
