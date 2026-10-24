@@ -129,7 +129,8 @@ public class ServerForecastSource {
                 in.inn(), in.asOf().minusDays(Math.max(historyDays, 1)), in.asOf());
         List<MlCoreApi.Operation> payload = new ArrayList<>(ops.size());
         for (Operation op : ops) {
-            if (op.getAmount() == null || op.getAmount().signum() <= 0 || op.getDirection() == null) {
+            if (op.getAmount() == null || op.getAmount().signum() <= 0 || op.getDirection() == null
+                    || in.excludedSources().contains(op.getSource())) {
                 continue;
             }
             payload.add(new MlCoreApi.Operation(code, op.getOperationId(), op.getOperationDate(), op.getAmount(),

@@ -94,7 +94,7 @@ public class CompanyAccessService {
         }
     }
 
-    private static String externalCompanyCode(String inn) {
+    public static String externalCompanyCode(String inn) {
         String digits = inn.replaceAll("\\D", "");
         if (digits.isEmpty()) {
             digits = Integer.toUnsignedString(inn.hashCode());

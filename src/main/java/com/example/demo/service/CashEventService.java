@@ -2,6 +2,7 @@ package com.example.demo.service;
 
 import com.example.demo.dto.forecast.CalendarResponse;
 import com.example.demo.dto.forecast.CashEventDto;
+import com.example.demo.dto.forecast.CashEventImportDto;
 import com.example.demo.dto.forecast.RegularOperationDto;
 import com.example.demo.entity.CashEvent;
 import com.example.demo.entity.CashEventStatus;
@@ -42,6 +43,7 @@ import java.util.Map;
 public class CashEventService {
 
     private static final DateTimeFormatter RU_DATE = DateTimeFormatter.ofPattern("dd.MM.yyyy");
+    private static final String CSV_SOURCE = "future-csv";
 
     private final CashEventRepository cashEventRepository;
     private final ForecastService forecastService;
@@ -114,10 +116,31 @@ public class CashEventService {
         return out;
     }
 
-    /** Imports future payments from CSV; the forecast is recalculated once for the whole file. */
+    /** Imports future payments from CSV in one go (all or nothing); the forecast is recalculated once. */
     @Transactional
     public List<CashEventDto> importCsv(String inn, MultipartFile file) throws IOException {
+        CashEventImportDto.PreviewResponse parsed = previewCsv(file);
+        for (CashEventImportDto.Row row : parsed.rows()) {
+            if (!row.valid()) {
+                throw new IllegalArgumentException("CSV line " + row.rowNumber() + ": " + row.error());
+            }
+        }
         List<CashEvent> created = new ArrayList<>();
+        for (CashEventImportDto.Row row : parsed.rows()) {
+            created.add(cashEventRepository.save(build(inn, new CashEventDto.CreateRequest(row.eventDate(),
+                    row.title(), row.direction(), row.amount(), row.category(), CashEventStatus.EXPECTED,
+                    CSV_SOURCE))));
+        }
+        if (!created.isEmpty()) {
+            forecastService.onDataChanged(inn, "Импортированы будущие платежи: " + created.size() + " шт.");
+        }
+        LocalDate ref = reference(inn);
+        return created.stream().map(e -> toDto(e, ref)).toList();
+    }
+
+    /** Parses the CSV and reports every line (valid or with an error) without saving anything. */
+    public CashEventImportDto.PreviewResponse previewCsv(MultipartFile file) throws IOException {
+        List<CashEventImportDto.Row> rows = new ArrayList<>();
         try (CSVParser parser = CSVFormat.DEFAULT.builder()
                 .setHeader()
                 .setSkipHeaderRecord(true)
@@ -126,28 +149,50 @@ public class CashEventService {
                 .build()
                 .parse(new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8))) {
             for (CSVRecord record : parser) {
-                long line = record.getRecordNumber() + 1;
+                int line = (int) record.getRecordNumber() + 1;
                 try {
-                    CashEventDto.CreateRequest req = new CashEventDto.CreateRequest(
-                            parseDate(required(record, "date", "event_date", "дата")),
-                            required(record, "title", "name", "название"),
-                            Direction.from(required(record, "direction", "направление")),
-                            new BigDecimal(required(record, "amount", "сумма").replace(" ", "").replace(',', '.')),
-                            optional(record, "category"),
-                            CashEventStatus.EXPECTED,
-                            "future-csv"
-                    );
-                    created.add(cashEventRepository.save(build(inn, req)));
+                    LocalDate date = parseDate(required(record, "date", "event_date", "дата"));
+                    String title = required(record, "title", "name", "название");
+                    Direction direction = Direction.from(required(record, "direction", "направление"));
+                    BigDecimal amount = new BigDecimal(
+                            required(record, "amount", "сумма").replace(" ", "").replace(',', '.'));
+                    requirePositive(amount);
+                    rows.add(new CashEventImportDto.Row(line, date, title, direction, amount,
+                            optional(record, "category"), true, null));
                 } catch (IllegalArgumentException | DateTimeParseException e) {
-                    throw new IllegalArgumentException("CSV line " + line + ": " + e.getMessage());
+                    rows.add(new CashEventImportDto.Row(line, null, null, null, null, null, false, e.getMessage()));
                 }
             }
         }
+        int valid = (int) rows.stream().filter(CashEventImportDto.Row::valid).count();
+        return new CashEventImportDto.PreviewResponse(rows, valid, rows.size() - valid);
+    }
+
+    /** Saves the rows the user confirmed; invalid rows are reported and skipped, one recalculation for the batch. */
+    @Transactional
+    public CashEventImportDto.ConfirmResponse confirmImport(String inn, List<CashEventDto.CreateRequest> rows) {
+        List<CashEvent> created = new ArrayList<>();
+        List<CashEventImportDto.Rejected> rejected = new ArrayList<>();
+        for (int i = 0; i < rows.size(); i++) {
+            CashEventDto.CreateRequest r = rows.get(i);
+            try {
+                if (r == null || r.eventDate() == null || r.title() == null || r.title().isBlank()
+                        || r.direction() == null) {
+                    throw new IllegalArgumentException("eventDate, title, direction and amount are required");
+                }
+                created.add(cashEventRepository.save(build(inn, new CashEventDto.CreateRequest(r.eventDate(),
+                        r.title(), r.direction(), r.amount(), r.category(),
+                        r.status() == null ? CashEventStatus.EXPECTED : r.status(),
+                        r.source() == null ? CSV_SOURCE : r.source()))));
+            } catch (IllegalArgumentException e) {
+                rejected.add(new CashEventImportDto.Rejected(i, e.getMessage()));
+            }
+        }
         if (!created.isEmpty()) {
-            forecastService.onDataChanged(inn, "Импортированы будущие платежи: " + created.size() + " шт.");
+            forecastService.onDataChanged(inn, "Подтверждён импорт будущих платежей: " + created.size() + " шт.");
         }
         LocalDate ref = reference(inn);
-        return created.stream().map(e -> toDto(e, ref)).toList();
+        return new CashEventImportDto.ConfirmResponse(created.stream().map(e -> toDto(e, ref)).toList(), rejected);
     }
 
     // ---------------------------------------------------------------- helpers

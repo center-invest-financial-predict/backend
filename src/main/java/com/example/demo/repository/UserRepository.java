@@ -9,4 +9,8 @@ import java.util.Optional;
 public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByEmail(String email);
     boolean existsByEmail(String email);
+
+    /** Users who have this company linked (user_inns). */
+    @org.springframework.data.jpa.repository.Query("SELECT u FROM User u WHERE :inn MEMBER OF u.inns ORDER BY u.id")
+    java.util.List<User> findByLinkedInn(@org.springframework.data.repository.query.Param("inn") String inn);
 }

@@ -16,6 +16,20 @@ import java.util.List;
 @Slf4j
 public class IntegrationClient {
 
+    /** The source cannot be asked: {@code notConfigured} (no URL) or not answering. */
+    public static class SourceUnavailableException extends RuntimeException {
+        private final boolean notConfigured;
+
+        public SourceUnavailableException(String message, boolean notConfigured, Throwable cause) {
+            super(message, cause);
+            this.notConfigured = notConfigured;
+        }
+
+        public boolean isNotConfigured() {
+            return notConfigured;
+        }
+    }
+
     private final RestClient.Builder restClientBuilder;
     private final String onecUrl;
     private final String gosUrl;
@@ -30,6 +44,10 @@ public class IntegrationClient {
         this.gosUrl = trimTrailingSlash(gosUrl);
     }
 
+    /**
+     * @throws SourceUnavailableException the URL is not configured or the service did not answer; an empty list
+     *                                    means the service answered and has nothing for this INN
+     */
     public List<OperationDto> fetchOperations(OperationSource source, String inn) {
         String baseUrl = switch (source) {
             case ONE_C -> onecUrl;
@@ -38,7 +56,7 @@ public class IntegrationClient {
         };
         if (baseUrl == null || baseUrl.isBlank()) {
             log.warn("Integration URL for {} is not configured, skipping pull for INN {}", source, inn);
-            return Collections.emptyList();
+            throw new SourceUnavailableException("URL источника " + source.getCode() + " не настроен", true, null);
         }
 
         try {
@@ -51,7 +69,7 @@ public class IntegrationClient {
             return body != null ? body : Collections.emptyList();
         } catch (RestClientException ex) {
             log.warn("Failed to pull operations from {} for INN {}: {}", source, inn, ex.getMessage());
-            return Collections.emptyList();
+            throw new SourceUnavailableException("Источник " + source.getCode() + " не отвечает", false, ex);
         }
     }
 

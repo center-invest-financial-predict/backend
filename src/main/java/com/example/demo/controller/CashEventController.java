@@ -2,6 +2,7 @@ package com.example.demo.controller;
 
 import com.example.demo.dto.forecast.CalendarResponse;
 import com.example.demo.dto.forecast.CashEventDto;
+import com.example.demo.dto.forecast.CashEventImportDto;
 import com.example.demo.dto.forecast.RegularOperationDto;
 import com.example.demo.entity.CashEventStatus;
 import com.example.demo.service.CashEventService;
@@ -95,6 +96,28 @@ public class CashEventController {
     ) {
         companyAccessService.ensureOwnedByUser(authentication.getName(), inn);
         return ResponseEntity.ok(cashEventService.regular(inn));
+    }
+
+    @PostMapping(value = "/import/preview", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Parse a future payments CSV and show every line (with errors); nothing is saved")
+    public ResponseEntity<CashEventImportDto.PreviewResponse> importPreview(
+            @PathVariable String inn,
+            @RequestParam("file") MultipartFile file,
+            Authentication authentication
+    ) throws IOException {
+        companyAccessService.ensureOwnedByUser(authentication.getName(), inn);
+        return ResponseEntity.ok(cashEventService.previewCsv(file));
+    }
+
+    @PostMapping("/import/confirm")
+    @Operation(summary = "Save the (possibly edited) rows of the preview; invalid rows are reported, valid ones saved")
+    public ResponseEntity<CashEventImportDto.ConfirmResponse> importConfirm(
+            @PathVariable String inn,
+            @Valid @RequestBody CashEventImportDto.ConfirmRequest request,
+            Authentication authentication
+    ) {
+        companyAccessService.ensureOwnedByUser(authentication.getName(), inn);
+        return ResponseEntity.ok(cashEventService.confirmImport(inn, request.rows()));
     }
 
     @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

@@ -30,6 +30,22 @@ public interface OperationRepository extends JpaRepository<Operation, Long> {
             Pageable pageable
     );
 
+    /** Like {@link #findFiltered} without the operations of the given sources ({@code excluded} must not be empty). */
+    @Query("""
+            SELECT o FROM Operation o
+            WHERE (o.companyInn = :inn OR o.counterpartyInn = :inn)
+              AND o.source NOT IN :excluded
+              AND (:fromDate IS NULL OR o.operationDate >= :fromDate)
+              AND (:toDate IS NULL OR o.operationDate <= :toDate)
+            """)
+    Page<Operation> findFilteredExcluding(
+            @Param("inn") String inn,
+            @Param("excluded") java.util.Collection<OperationSource> excluded,
+            @Param("fromDate") LocalDate fromDate,
+            @Param("toDate") LocalDate toDate,
+            Pageable pageable
+    );
+
     @Query("""
             SELECT CASE WHEN COUNT(o) > 0 THEN true ELSE false END
             FROM Operation o

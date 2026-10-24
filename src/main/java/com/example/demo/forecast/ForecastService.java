@@ -4,14 +4,17 @@ import com.example.demo.entity.CashEvent;
 import com.example.demo.entity.CashEventStatus;
 import com.example.demo.entity.Direction;
 import com.example.demo.entity.Operation;
+import com.example.demo.entity.OperationSource;
 import com.example.demo.exception.InsufficientHistoryException;
 import com.example.demo.forecast.ForecastTypes.EventItem;
 import com.example.demo.forecast.ForecastTypes.Inputs;
 import com.example.demo.forecast.ForecastTypes.Residual;
 import com.example.demo.forecast.ForecastTypes.Run;
 import com.example.demo.repository.CashEventRepository;
+import com.example.demo.repository.CompanySourceRepository;
 import com.example.demo.repository.OperationRepository;
 import com.example.demo.service.RecalcJournalService;
+import com.example.demo.service.SourceFilter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -24,6 +27,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -53,6 +57,7 @@ public class ForecastService {
     private final ForecastEngine engine;
     private final RecalcJournalService journalService;
     private final ServerForecastSource serverSource;
+    private final CompanySourceRepository companySourceRepository;
 
     private final Map<String, Cached> cache = new ConcurrentHashMap<>();
 
@@ -222,24 +227,39 @@ public class ForecastService {
         return c;
     }
 
+    private Set<OperationSource> disabledSources(String inn) {
+        return SourceFilter.disabled(companySourceRepository, inn);
+
+    }
+
     private Cached build(String inn) {
+        Set<OperationSource> disabled = disabledSources(inn);
         LocalDate asOf = operationRepository.findLastOperationDate(inn)
                 .orElseThrow(() -> new InsufficientHistoryException("cash-forecast", MIN_HISTORY_DAYS, 0));
         LocalDate first = operationRepository.findFirstOperationDate(inn).orElse(asOf);
+
+        LocalDate from = asOf.minusDays(HISTORY_WINDOW_DAYS);
+        List<Operation> ops = operationRepository.findByCompanyInnAndDateRange(inn, from, asOf);
+        if (!disabled.isEmpty()) {
+            // The user switched sources off: the forecast is built on what is left, including its own "today".
+            ops = ops.stream().filter(o -> !disabled.contains(o.getSource())).toList();
+            if (ops.isEmpty()) {
+                throw new InsufficientHistoryException("cash-forecast", MIN_HISTORY_DAYS, 0);
+            }
+            asOf = ops.stream().map(Operation::getOperationDate).max(Comparator.naturalOrder()).orElse(asOf);
+            first = ops.stream().map(Operation::getOperationDate).min(Comparator.naturalOrder()).orElse(asOf);
+        }
         int historyDays = (int) ChronoUnit.DAYS.between(first, asOf) + 1;
         if (historyDays < MIN_HISTORY_DAYS) {
             throw new InsufficientHistoryException("cash-forecast", MIN_HISTORY_DAYS, historyDays);
         }
-
-        LocalDate from = asOf.minusDays(HISTORY_WINDOW_DAYS);
-        List<Operation> ops = operationRepository.findByCompanyInnAndDateRange(inn, from, asOf);
 
         BigDecimal start = startBalance(inn, ops);
         RegularDetector.Detection detection = regularDetector.detect(ops, asOf);
         Residual residual = residual(ops, detection.keys(), asOf, historyDays);
         List<EventItem> events = events(inn, asOf);
 
-        Inputs inputs = new Inputs(inn, asOf, start, historyDays, detection.items(), events, residual);
+        Inputs inputs = new Inputs(inn, asOf, start, historyDays, detection.items(), events, residual, disabled);
         return new Cached(inputs, detection);
     }
 

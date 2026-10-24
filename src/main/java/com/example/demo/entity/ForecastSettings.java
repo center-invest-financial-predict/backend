@@ -31,6 +31,10 @@ public class ForecastSettings {
     @Column(name = "notify_rules_json", columnDefinition = "TEXT")
     private String notifyRulesJson;
 
+    /** Scenario presets chosen by the user, e.g. {@code {"own": {"name": "...", "conditions": [...]}}}. */
+    @Column(name = "presets_json", columnDefinition = "TEXT")
+    private String presetsJson;
+
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 

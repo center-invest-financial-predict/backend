@@ -4,6 +4,7 @@ import com.example.demo.dto.forecast.*;
 import com.example.demo.forecast.Condition;
 import com.example.demo.service.CashForecastService;
 import com.example.demo.service.CompanyAccessService;
+import com.example.demo.service.ForecastPresetService;
 import com.example.demo.service.ForecastScenarioService;
 import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +24,7 @@ public class CashForecastController {
     private final CompanyAccessService companyAccessService;
     private final CashForecastService cashForecastService;
     private final ForecastScenarioService scenarioService;
+    private final ForecastPresetService presetService;
 
     @GetMapping("/dashboard")
     @Operation(summary = "Overview KPIs from the current forecast (balance, minimum, gap date/amount/probability)")
@@ -94,6 +96,28 @@ public class CashForecastController {
         return ResponseEntity.ok(cashForecastService.forecast(inn, horizonDays, conditions, scenarioId));
     }
 
+    @PostMapping("/forecast")
+    @Operation(summary = "Balance forecast with typed scenario conditions passed in the body (nothing is saved). "
+            + "Body: {horizonDays?, conditions: [{type: delay_payment|revenue_drop|fixed_cost_growth|extra_expense|"
+            + "extra_income|shift_payment|skip_payment, ...}]}")
+    public ResponseEntity<ForecastSeriesResponse> forecastWithConditions(
+            @PathVariable String inn,
+            @RequestBody ScenarioDto.PreviewRequest request,
+            Authentication authentication
+    ) {
+        companyAccessService.ensureOwnedByUser(authentication.getName(), inn);
+        return ResponseEntity.ok(scenarioService.preview(inn, request));
+    }
+
+    @GetMapping("/forecast-presets")
+    @Operation(summary = "Forecast presets (cons/base/opt/own): conditions, minimum balance, gap date/amount/"
+            + "probability and impact versus base; activePreset follows settings.cautionLevel")
+    public ResponseEntity<ForecastPresetsResponse> forecastPresets(@PathVariable String inn,
+                                                                   Authentication authentication) {
+        companyAccessService.ensureOwnedByUser(authentication.getName(), inn);
+        return ResponseEntity.ok(presetService.presets(inn));
+    }
+
     @GetMapping("/forecast/day")
     @Operation(summary = "Day drill-down: what the day consists of and why")
     public ResponseEntity<ForecastDayResponse> forecastDay(
@@ -129,6 +153,25 @@ public class CashForecastController {
     ) {
         companyAccessService.ensureOwnedByUser(authentication.getName(), inn);
         return ResponseEntity.ok(cashForecastService.journal(inn, limit));
+    }
+
+    @PutMapping("/sources")
+    @Operation(summary = "Choose the data sources (1C, csv, Gos_service): only the listed ones are used for the "
+            + "forecast, ML models, KPIs and charts; the others are switched off. At least one is required.")
+    public ResponseEntity<DataSourcesResponse> selectSources(
+            @PathVariable String inn,
+            @RequestBody @jakarta.validation.Valid SourceSelectionRequest request, Authentication authentication) {
+        companyAccessService.ensureOwnedByUser(authentication.getName(), inn);
+        return ResponseEntity.ok(cashForecastService.selectSources(inn, request.sources()));
+    }
+
+    @PutMapping("/sources/{code}")
+    @Operation(summary = "Switch a data source on/off; a disabled source is excluded from the forecast")
+    public ResponseEntity<DataSourcesResponse.SourceStatus> setSourceEnabled(
+            @PathVariable String inn, @PathVariable String code,
+            @RequestBody @jakarta.validation.Valid SourceToggleRequest request, Authentication authentication) {
+        companyAccessService.ensureOwnedByUser(authentication.getName(), inn);
+        return ResponseEntity.ok(cashForecastService.setSourceEnabled(inn, code, request.enabled()));
     }
 
     @GetMapping("/sources")

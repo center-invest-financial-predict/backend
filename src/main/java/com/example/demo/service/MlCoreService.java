@@ -91,8 +91,9 @@ public class MlCoreService {
         Company company = company(inn);
 
         LocalDate asOf = inputs.asOf();
-        List<Operation> ops = operationRepository.findByCompanyInnAndDateRange(
-                inn, asOf.minusDays(Math.max(historyDays, 1)), asOf);
+        // Only the sources the user has switched on go to the model.
+        List<Operation> ops = SourceFilter.without(operationRepository.findByCompanyInnAndDateRange(
+                inn, asOf.minusDays(Math.max(historyDays, 1)), asOf), inputs.excludedSources());
         List<MlCoreApi.Operation> payload = new ArrayList<>(ops.size());
         for (Operation op : ops) {
             if (op.getAmount() == null || op.getAmount().signum() <= 0 || op.getDirection() == null) {

@@ -37,6 +37,7 @@ public final class ForecastFixture {
         Mockito.when(events.findByCompanyInnAndEventDateGreaterThanEqualAndStatusInOrderByEventDateAscIdAsc(any(), any(), any()))
                 .thenReturn(List.of());
         this.service = new ForecastService(operations, events, new RegularDetector(new CategoryClassifier()),
-                new ForecastEngine(), journal, sourceFactory.apply(operations));
+                new ForecastEngine(), journal, sourceFactory.apply(operations),
+                Mockito.mock(com.example.demo.repository.CompanySourceRepository.class));
     }
 }

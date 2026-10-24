@@ -10,6 +10,7 @@ import com.example.demo.entity.Operation;
 import com.example.demo.exception.InsufficientHistoryException;
 import com.example.demo.exception.ResourceNotFoundException;
 import com.example.demo.repository.CompanyRepository;
+import com.example.demo.repository.CompanySourceRepository;
 import com.example.demo.repository.OperationRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -45,6 +46,7 @@ public class MlForecastService {
     private final OperationRepository operationRepository;
     private final CompanyRepository companyRepository;
     private final MlServiceClient mlServiceClient;
+    private final CompanySourceRepository companySourceRepository;
 
     public MlForecastResultResponse forecast(String inn, int horizonDays, String model) {
         String modelName = normalizeModel(model);
@@ -58,8 +60,10 @@ public class MlForecastService {
 
         LocalDate lastDate = operationRepository.findLastOperationDate(inn)
                 .orElseThrow(() -> new InsufficientHistoryException(modelName, minHistoryDays(modelName), 0));
-        List<Operation> operations = operationRepository.findByCompanyInnAndDateRange(
-                inn, lastDate.minusDays(HISTORY_WINDOW_DAYS - 1L), lastDate);
+        // Only the sources the user has switched on go to the model.
+        List<Operation> operations = SourceFilter.without(operationRepository.findByCompanyInnAndDateRange(
+                inn, lastDate.minusDays(HISTORY_WINDOW_DAYS - 1L), lastDate),
+                SourceFilter.disabled(companySourceRepository, inn));
 
         List<MlForecastRequest.HistoryDay> history = buildDailyHistory(operations);
         int required = minHistoryDays(modelName);

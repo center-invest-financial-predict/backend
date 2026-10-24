@@ -29,6 +29,13 @@ public final class AssistantDto {
     ) {
     }
 
+    /** role: user | assistant. Order is chronological. */
+    public record HistoryMessage(String role, String content) {
+    }
+
+    public record HistoryResponse(String companyInn, String conversationId, List<HistoryMessage> messages) {
+    }
+
     /** Key numbers of the calculation the answer is based on (computed by the engine, never by the LLM). */
     public record Figures(
             LocalDate dataAsOf,

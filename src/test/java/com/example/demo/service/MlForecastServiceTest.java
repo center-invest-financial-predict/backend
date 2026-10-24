@@ -38,7 +38,8 @@ class MlForecastServiceTest {
     private final OperationRepository operationRepository = mock(OperationRepository.class);
     private final CompanyRepository companyRepository = mock(CompanyRepository.class);
     private final MlServiceClient client = mock(MlServiceClient.class);
-    private final MlForecastService service = new MlForecastService(operationRepository, companyRepository, client);
+    private final MlForecastService service = new MlForecastService(operationRepository, companyRepository, client,
+            org.mockito.Mockito.mock(com.example.demo.repository.CompanySourceRepository.class));
 
     private static Operation op(String date, Direction dir, String amount, String balance) {
         Operation o = new Operation();

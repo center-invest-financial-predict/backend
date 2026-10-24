@@ -241,7 +241,7 @@ public class AssistantService {
     }
 
     /** user + company + client chat id; the client part cannot escape its namespace. */
-    String conversationKey(String email, String inn, String clientConversationId) {
+    public String conversationKey(String email, String inn, String clientConversationId) {
         User user = (User) userDetailsService.loadUserByUsername(email);
         String chat = clientConversationId == null || clientConversationId.isBlank()
                 ? "default" : clientConversationId.trim().replaceAll("[^A-Za-z0-9_.-]", "_");

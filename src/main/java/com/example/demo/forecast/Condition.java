@@ -14,12 +14,13 @@ import java.util.Map;
  * {@code {"type": "...", ...}} objects, so the persisted contract is the {@link #toMap()} form.
  *
  * <pre>
- * delay_payment        {days, match?}       incoming payments (all, or those whose title/counterparty contains match) arrive later
+ * delay_payment        {days, match?}       incoming payments (all, or those whose title/counterparty contains match) arrive later (days &lt; 0 = earlier)
  * revenue_drop         {pct}                regular and unscheduled revenue is lower by pct %
  * extra_expense        {amount, date|dayOffset}  one-off unplanned payment (default: day 7)
  * extra_income         {amount, date|dayOffset}  one-off additional receipt (default: day 7)
  * fixed_cost_growth    {pct}                rent / salary / credit payments are higher by pct %
  * shift_payment        {match, days|newDate}     move a matching payment (days &lt; 0 = earlier)
+ * skip_payment         {match}                   a matching payment (receipt or expense) does not happen at all
  * </pre>
  */
 public record Condition(
@@ -47,7 +48,8 @@ public record Condition(
         EXTRA_EXPENSE("extra_expense"),
         EXTRA_INCOME("extra_income"),
         FIXED_COST_GROWTH("fixed_cost_growth"),
-        SHIFT_PAYMENT("shift_payment");
+        SHIFT_PAYMENT("shift_payment"),
+        SKIP_PAYMENT("skip_payment");
 
         private final String code;
 
@@ -118,8 +120,9 @@ public record Condition(
 
         switch (type) {
             case DELAY_PAYMENT -> {
-                if (days < 1 || days > 90) {
-                    throw new IllegalArgumentException("delay_payment.days must be in 1..90");
+                if (days == 0 || days < -30 || days > 90) {
+                    throw new IllegalArgumentException(
+                            "delay_payment.days must be in 1..90 (negative -30..-1 = payments come earlier)");
                 }
             }
             case REVENUE_DROP -> {
@@ -146,6 +149,11 @@ public record Condition(
                 }
                 if (newDate == null && (days == 0 || Math.abs(days) > 90)) {
                     throw new IllegalArgumentException("shift_payment requires newDate or days in -90..90 (non-zero)");
+                }
+            }
+            case SKIP_PAYMENT -> {
+                if (match == null) {
+                    throw new IllegalArgumentException("skip_payment.match is required");
                 }
             }
         }
@@ -179,6 +187,7 @@ public record Condition(
                     m.put("days", days);
                 }
             }
+            case SKIP_PAYMENT -> m.put("match", match);
         }
         return m;
     }
@@ -195,7 +204,7 @@ public record Condition(
     public String describe() {
         return switch (type) {
             case DELAY_PAYMENT -> (match == null ? "Поступления" : "Поступления от «" + match + "»")
-                    + " задерживаются на " + days + " дн.";
+                    + (days < 0 ? " приходят раньше на " + (-days) : " задерживаются на " + days) + " дн.";
             case REVENUE_DROP -> "Выручка ниже на " + trim(pct) + "%";
             case FIXED_COST_GROWTH -> "Постоянные расходы выше на " + trim(pct) + "%";
             case EXTRA_EXPENSE -> "Внеплановый расход " + Money.rub(amount) + " " + when();
@@ -203,6 +212,7 @@ public record Condition(
             case SHIFT_PAYMENT -> newDate != null
                     ? "Платёж «" + match + "» переносится на " + newDate
                     : "Платёж «" + match + "» " + (days < 0 ? "раньше на " + (-days) : "позже на " + days) + " дн.";
+            case SKIP_PAYMENT -> "Платёж «" + match + "» не состоится";
         };
     }
 

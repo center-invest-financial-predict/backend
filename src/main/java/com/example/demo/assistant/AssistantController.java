@@ -23,6 +23,7 @@ public class AssistantController {
 
     private final CompanyAccessService companyAccessService;
     private final AssistantService assistantService;
+    private final AssistantHistoryService historyService;
 
     @PostMapping("/ask")
     @Operation(summary = "Explain the current forecast (or a scenario / a day) with the LLM; numbers come from the calculation")
@@ -44,6 +45,29 @@ public class AssistantController {
     ) {
         companyAccessService.ensureOwnedByUser(authentication.getName(), inn);
         return assistantService.stream(authentication.getName(), inn, request);
+    }
+
+    @GetMapping("/history")
+    @Operation(summary = "Messages of the current user's conversation about this company (conversationId optional)")
+    public ResponseEntity<AssistantDto.HistoryResponse> history(
+            @PathVariable String inn,
+            @RequestParam(required = false) String conversationId,
+            Authentication authentication
+    ) {
+        companyAccessService.ensureOwnedByUser(authentication.getName(), inn);
+        return ResponseEntity.ok(historyService.history(authentication.getName(), inn, conversationId));
+    }
+
+    @DeleteMapping("/history")
+    @Operation(summary = "Clear the current user's conversation about this company")
+    public ResponseEntity<Void> clearHistory(
+            @PathVariable String inn,
+            @RequestParam(required = false) String conversationId,
+            Authentication authentication
+    ) {
+        companyAccessService.ensureOwnedByUser(authentication.getName(), inn);
+        historyService.clear(authentication.getName(), inn, conversationId);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/context")

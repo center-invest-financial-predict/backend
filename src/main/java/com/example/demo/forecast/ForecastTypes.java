@@ -27,8 +27,15 @@ public final class ForecastTypes {
                            int windowDays) {
     }
 
+    /** {@code excludedSources}: sources the user switched off; their operations are not part of the forecast. */
     public record Inputs(String inn, LocalDate asOf, BigDecimal startBalance, int historyDays,
-                         List<RegularItem> regulars, List<EventItem> events, Residual residual) {
+                         List<RegularItem> regulars, List<EventItem> events, Residual residual,
+                         java.util.Set<com.example.demo.entity.OperationSource> excludedSources) {
+        public Inputs(String inn, LocalDate asOf, BigDecimal startBalance, int historyDays,
+                      List<RegularItem> regulars, List<EventItem> events, Residual residual) {
+            this(inn, asOf, startBalance, historyDays, regulars, events, residual,
+                 java.util.EnumSet.noneOf(com.example.demo.entity.OperationSource.class));
+        }
     }
 
     public record DayItem(String title, String source, String direction, BigDecimal amount,

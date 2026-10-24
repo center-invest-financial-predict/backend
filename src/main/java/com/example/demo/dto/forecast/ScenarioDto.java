@@ -29,8 +29,10 @@ public record ScenarioDto(
     ) {
     }
 
+    /** @param horizonDays 1..90, default 30 */
     public record PreviewRequest(
-            Object conditions
+            Object conditions,
+            Integer horizonDays
     ) {
     }
 

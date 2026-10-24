@@ -38,6 +38,24 @@ class ConditionTest {
     }
 
     @Test
+    void skipPaymentRequiresMatchAndRoundTrips() {
+        List<Condition> parsed = Condition.parse(List.of(Map.of("type", "skip_payment", "match", "Аренда")));
+        assertThat(Condition.parse(Condition.toMaps(parsed))).isEqualTo(parsed);
+        assertThat(parsed.get(0).describe()).contains("Аренда").contains("не состоится");
+        assertThatThrownBy(() -> Condition.parse(List.of(Map.of("type", "skip_payment"))))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("skip_payment.match");
+    }
+
+    @Test
+    void delayPaymentAllowsPaymentsComingEarlier() {
+        Condition earlier = Condition.parse(List.of(Map.of("type", "delay_payment", "days", -3))).get(0);
+        assertThat(earlier.days()).isEqualTo(-3);
+        assertThat(earlier.describe()).contains("раньше на 3");
+        assertThatThrownBy(() -> Condition.parse(List.of(Map.of("type", "delay_payment", "days", -31))))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void emptyInputMeansNoConditions() {
         assertThat(Condition.parse(null)).isEmpty();
         assertThat(Condition.parse(List.of())).isEmpty();

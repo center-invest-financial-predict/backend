@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <changeSet id="007-create-company-sources" author="hackathon">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <tableExists tableName="company_sources"/>
+            </not>
+        </preConditions>
+        <createTable tableName="company_sources">
+            <column name="id" type="BIGSERIAL">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="company_inn" type="VARCHAR(20)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="source_code" type="VARCHAR(50)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="enabled" type="BOOLEAN" defaultValueBoolean="true">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addUniqueConstraint tableName="company_sources" columnNames="company_inn, source_code"
+                             constraintName="uq_company_sources_inn_code"/>
+        <addForeignKeyConstraint
+                baseTableName="company_sources"
+                baseColumnNames="company_inn"
+                referencedTableName="companies"
+                referencedColumnNames="inn"
+                constraintName="fk_company_sources_company"/>
+    </changeSet>
+</databaseChangeLog>

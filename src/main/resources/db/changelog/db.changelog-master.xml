@@ -11,5 +11,7 @@
     <include file="db/changelog/changes/004-companies-and-operations.xml" relativeToChangelogFile="false"/>
     <include file="db/changelog/changes/005-widen-inn.xml" relativeToChangelogFile="false"/>
     <include file="db/changelog/changes/006-cash-forecast.xml" relativeToChangelogFile="false"/>
+    <include file="db/changelog/changes/007-company-sources.xml" relativeToChangelogFile="false"/>
+    <include file="db/changelog/changes/008-presets-and-notifications.xml" relativeToChangelogFile="false"/>
 
 </databaseChangeLog>

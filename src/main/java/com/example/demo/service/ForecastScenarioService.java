@@ -99,7 +99,9 @@ public class ForecastScenarioService {
     @Transactional(readOnly = true)
     public ForecastSeriesResponse preview(String inn, ScenarioDto.PreviewRequest request) {
         List<Condition> conditions = Condition.parse(request == null ? null : request.conditions());
-        return cashForecastService.forecast(inn, ForecastService.DEFAULT_HORIZON, conditions, null);
+        int horizon = request == null || request.horizonDays() == null
+                ? ForecastService.DEFAULT_HORIZON : request.horizonDays();
+        return cashForecastService.forecast(inn, horizon, conditions, null);
     }
 
     /** Ready-made what-if examples with real results on the current data. */

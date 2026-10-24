@@ -57,7 +57,8 @@ class ForecastEngineTest {
         Mockito.when(events.findByCompanyInnAndEventDateGreaterThanEqualAndStatusInOrderByEventDateAscIdAsc(any(), any(), any()))
                 .thenAnswer(i -> eventList);
         service = new ForecastService(operations, events, new RegularDetector(new CategoryClassifier()),
-                new ForecastEngine(), journal, ServerForecastSource.disabled());
+                new ForecastEngine(), journal, ServerForecastSource.disabled(),
+                Mockito.mock(com.example.demo.repository.CompanySourceRepository.class));
     }
 
     private CashEvent event(LocalDate date, String title, Direction direction, double amount, String category) {
@@ -197,6 +198,19 @@ class ForecastEngineTest {
 
         assertThat(extra.conditions()).hasSize(1);
         assertThat(service.baseline(INN).totalOutflow()).isEqualByComparingTo(base.totalOutflow()); // base untouched
+    }
+
+    @Test
+    void skippedPaymentDisappearsAndEarlierReceiptsDoNotHurt() {
+        Run base = service.baseline(INN);
+
+        Run skipped = service.run(INN, 30, Condition.parse(List.of(Map.of("type", "skip_payment", "match", "Налоги"))));
+        assertThat(skipped.totalOutflow().subtract(base.totalOutflow())).isEqualByComparingTo("-150000");
+        assertThat(skipped.endBalance()).isGreaterThan(base.endBalance());
+
+        Run earlier = service.run(INN, 30, Condition.parse(List.of(Map.of("type", "delay_payment", "days", -3))));
+        assertThat(earlier.minBalance()).isGreaterThanOrEqualTo(base.minBalance());
+        assertThat(earlier.conditions()).hasSize(1);
     }
 
     @Test

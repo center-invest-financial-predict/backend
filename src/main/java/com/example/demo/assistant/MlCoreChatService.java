@@ -190,6 +190,8 @@ public class MlCoreChatService {
                 case SHIFT_PAYMENT -> out.add(new MlCoreApi.Scenario(id, "shift_payment",
                         targets(c.match(), null, events), c.newDate() == null ? c.days() : null, null, null,
                         c.newDate(), null, description));
+                case SKIP_PAYMENT -> out.add(new MlCoreApi.Scenario(id, "skip_payment",
+                        targets(c.match(), null, events), null, null, null, null, null, description));
                 case REVENUE_DROP -> out.add(new MlCoreApi.Scenario(id, "revenue_drop", List.of(), null,
                         plain(c.pct()), null, null, null, description));
                 case FIXED_COST_GROWTH -> out.add(new MlCoreApi.Scenario(id, "fixed_cost_growth", List.of(), null,
@@ -248,6 +250,10 @@ public class MlCoreChatService {
                 case "fixed_cost_growth", "fixed_costs_growth", "fixed_cost_increase", "fixed_costs_increase" -> {
                     m.put("type", "fixed_cost_growth");
                     m.put("pct", percent == null ? 0 : percent.doubleValue());
+                }
+                case "skip_payment", "skip", "cancel_payment" -> {
+                    m.put("type", "skip_payment");
+                    putIfNotNull(m, "match", match);
                 }
                 case "shift_payment", "shift", "move_payment", "reschedule" -> {
                     m.put("type", "shift_payment");

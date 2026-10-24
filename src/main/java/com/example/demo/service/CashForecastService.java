@@ -4,6 +4,7 @@ import com.example.demo.dto.forecast.*;
 import com.example.demo.dto.operation.OperationResponse;
 import com.example.demo.entity.CashEvent;
 import com.example.demo.entity.CashEventStatus;
+import com.example.demo.entity.CompanySource;
 import com.example.demo.entity.Direction;
 import com.example.demo.entity.Operation;
 import com.example.demo.entity.OperationSource;
@@ -17,6 +18,7 @@ import com.example.demo.forecast.ForecastTypes.Inputs;
 import com.example.demo.forecast.ForecastTypes.Run;
 import com.example.demo.forecast.Money;
 import com.example.demo.repository.CashEventRepository;
+import com.example.demo.repository.CompanySourceRepository;
 import com.example.demo.repository.OperationRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
@@ -47,6 +49,7 @@ public class CashForecastService {
 
     private final OperationRepository operationRepository;
     private final CashEventRepository cashEventRepository;
+    private final CompanySourceRepository companySourceRepository;
     private final ForecastService forecastService;
     private final ForecastSettingsService forecastSettingsService;
     private final RecalcJournalService recalcJournalService;
@@ -59,10 +62,11 @@ public class CashForecastService {
         Run run = forecastService.baseline(inn);
         LocalDate asOf = run.asOf();
 
-        BigDecimal weeklyIncome = nz(operationRepository.sumIncome(inn, asOf.minusDays(6), asOf));
-        BigDecimal weeklyExpense = nz(operationRepository.sumExpense(inn, asOf.minusDays(6), asOf));
-        BigDecimal prevIncome = nz(operationRepository.sumIncome(inn, asOf.minusDays(13), asOf.minusDays(7)));
-        BigDecimal prevExpense = nz(operationRepository.sumExpense(inn, asOf.minusDays(13), asOf.minusDays(7)));
+        Set<OperationSource> disabled = disabledSources(inn);
+        BigDecimal weeklyIncome = sum(inn, asOf.minusDays(6), asOf, Direction.INCOME, disabled);
+        BigDecimal weeklyExpense = sum(inn, asOf.minusDays(6), asOf, Direction.EXPENSE, disabled);
+        BigDecimal prevIncome = sum(inn, asOf.minusDays(13), asOf.minusDays(7), Direction.INCOME, disabled);
+        BigDecimal prevExpense = sum(inn, asOf.minusDays(13), asOf.minusDays(7), Direction.EXPENSE, disabled);
 
         return new DashboardResponse(
                 inn,
@@ -111,7 +115,6 @@ public class CashForecastService {
                     base.firstGap().date(), base.firstGap().deficit(), "Открыть прогноз", "forecast"));
         } else if (ruleEnabled(settings, "gapRisk")
                 && (base.probability() >= RISK_ALERT_PROBABILITY || base.p10Gap() != null)) {
-            Run.class.getName();
             var g = base.p10Gap();
             out.add(new AlertDto("risk", "RISK", "warning",
                     "Риск кассового разрыва: " + Money.pct(base.probability()),
@@ -296,7 +299,7 @@ public class CashForecastService {
         for (int i = 0; i < 4; i++) {
             buckets.put(start.plusWeeks(i), new BigDecimal[]{BigDecimal.ZERO, BigDecimal.ZERO});
         }
-        for (Operation op : operationRepository.findByCompanyInnAndDateRange(inn, start, asOf)) {
+        for (Operation op : operations(inn, start, asOf)) {
             BigDecimal[] b = buckets.get(op.getOperationDate().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)));
             if (b != null) {
                 int idx = op.getDirection() == Direction.INCOME ? 0 : 1;
@@ -318,7 +321,7 @@ public class CashForecastService {
         LocalDate end = to == null ? forecastService.asOf(inn) : to;
         LocalDate start = from == null ? end.minusDays(29) : from;
         Map<String, BigDecimal> map = new LinkedHashMap<>();
-        for (Operation op : operationRepository.findByCompanyInnAndDateRange(inn, start, end)) {
+        for (Operation op : operations(inn, start, end)) {
             if (op.getDirection() == dir) {
                 map.merge(classifier.classify(op), op.getAmount(), BigDecimal::add);
             }
@@ -406,7 +409,7 @@ public class CashForecastService {
 
     private TreeMap<LocalDate, BigDecimal> dailyBalances(String inn, Run run, LocalDate from) {
         Map<LocalDate, BigDecimal> net = new HashMap<>();
-        for (Operation op : operationRepository.findByCompanyInnAndDateRange(inn, from, run.asOf())) {
+        for (Operation op : operations(inn, from, run.asOf())) {
             BigDecimal v = op.getDirection() == Direction.INCOME ? op.getAmount() : op.getAmount().negate();
             net.merge(op.getOperationDate(), v, BigDecimal::add);
         }
@@ -454,12 +457,79 @@ public class CashForecastService {
     public DataSourcesResponse sources(String inn) {
         List<DataSourcesResponse.SourceStatus> list = new ArrayList<>();
         for (OperationSource src : OperationSource.values()) {
-            long count = operationRepository.countByCompanyInnAndSource(inn, src);
-            Optional<LocalDate> last = operationRepository.findMaxDateBySource(inn, src);
-            list.add(new DataSourcesResponse.SourceStatus(src.getCode(), src.name(), count > 0,
-                    last.orElse(null), count));
+            list.add(sourceStatus(inn, src));
         }
         return new DataSourcesResponse(inn, list);
+    }
+
+    private DataSourcesResponse.SourceStatus sourceStatus(String inn, OperationSource src) {
+        long count = operationRepository.countByCompanyInnAndSource(inn, src);
+        Optional<LocalDate> last = operationRepository.findMaxDateBySource(inn, src);
+        boolean enabled = companySourceRepository.findByCompanyInnAndSourceCode(inn, src.getCode())
+                .map(CompanySource::isEnabled).orElse(true);
+        return new DataSourcesResponse.SourceStatus(src.getCode(), src.name(), count > 0, enabled,
+                last.orElse(null), count);
+    }
+
+    /** Switches a source on/off for the company; a disabled source is left out of the forecast. */
+    @Transactional
+    public DataSourcesResponse.SourceStatus setSourceEnabled(String inn, String code, boolean enabled) {
+        OperationSource src = OperationSource.from(code);
+        if (!enabled) {
+            Set<OperationSource> remaining = EnumSet.allOf(OperationSource.class);
+            remaining.removeAll(disabledSources(inn));
+            remaining.remove(src);
+            if (remaining.isEmpty()) {
+                throw new IllegalArgumentException("Нужен хотя бы один включённый источник данных");
+            }
+        }
+        if (applyEnabled(inn, src, enabled)) {
+            forecastService.onDataChanged(inn,
+                    (enabled ? "Источник включён: " : "Источник отключён: ") + src.getCode());
+        }
+        return sourceStatus(inn, src);
+    }
+
+    /**
+     * "Take data from these sources": exactly the listed sources are used, all the others are switched off.
+     * The forecast, ML requests, KPIs, charts and the operations list then work only with the chosen ones.
+     */
+    @Transactional
+    public DataSourcesResponse selectSources(String inn, List<String> codes) {
+        Set<OperationSource> chosen = EnumSet.noneOf(OperationSource.class);
+        for (String code : codes == null ? List.<String>of() : codes) {
+            chosen.add(OperationSource.from(code));
+        }
+        if (chosen.isEmpty()) {
+            throw new IllegalArgumentException("Выберите хотя бы один источник данных");
+        }
+        boolean changed = false;
+        for (OperationSource src : OperationSource.values()) {
+            changed |= applyEnabled(inn, src, chosen.contains(src));
+        }
+        if (changed) {
+            forecastService.onDataChanged(inn, "Выбраны источники данных: "
+                    + chosen.stream().map(OperationSource::getCode).collect(java.util.stream.Collectors.joining(", ")));
+        }
+        return sources(inn);
+    }
+
+    /** @return whether the stored choice changed (no row means "enabled") */
+    private boolean applyEnabled(String inn, OperationSource src, boolean enabled) {
+        Optional<CompanySource> existing = companySourceRepository.findByCompanyInnAndSourceCode(inn, src.getCode());
+        if (existing.isEmpty() && enabled) {
+            return false;
+        }
+        CompanySource row = existing.orElseGet(() -> {
+            CompanySource created = new CompanySource();
+            created.setCompanyInn(inn);
+            created.setSourceCode(src.getCode());
+            return created;
+        });
+        boolean changed = row.getId() == null ? !enabled : row.isEnabled() != enabled;
+        row.setEnabled(enabled);
+        companySourceRepository.save(row);
+        return changed;
     }
 
     @Transactional(readOnly = true)
@@ -468,13 +538,32 @@ public class CashForecastService {
         if (query.isBlank()) {
             return new SearchResponse(query, List.of(), List.of());
         }
-        List<OperationResponse> ops = operationRepository.search(inn, query, PageRequest.of(0, 50))
+        Set<OperationSource> disabled = disabledSources(inn);
+        List<OperationResponse> ops = SourceFilter.without(
+                        operationRepository.search(inn, query, PageRequest.of(0, 50)), disabled)
                 .stream().map(OperationResponse::from).toList();
         List<CashEventDto> events = cashEventRepository.search(inn, query).stream()
                 .limit(50)
                 .map(CashEventDto::from)
                 .toList();
         return new SearchResponse(query, ops, events);
+    }
+
+    private Set<OperationSource> disabledSources(String inn) {
+        return SourceFilter.disabled(companySourceRepository, inn);
+    }
+
+    /** Operations of the period from the sources the user has switched on. */
+    private List<Operation> operations(String inn, LocalDate from, LocalDate to) {
+        return SourceFilter.without(operationRepository.findByCompanyInnAndDateRange(inn, from, to),
+                disabledSources(inn));
+    }
+
+    private BigDecimal sum(String inn, LocalDate from, LocalDate to, Direction direction,
+                           Set<OperationSource> disabled) {
+        return SourceFilter.without(operationRepository.findByCompanyInnAndDateRange(inn, from, to), disabled)
+                .stream().filter(o -> o.getDirection() == direction)
+                .map(Operation::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     private static BigDecimal nz(BigDecimal v) {

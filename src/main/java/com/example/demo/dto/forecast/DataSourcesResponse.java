@@ -11,6 +11,7 @@ public record DataSourcesResponse(
             String code,
             String name,
             boolean connected,
+            boolean enabled,
             LocalDate lastDataDate,
             long operationCount
     ) {

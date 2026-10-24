@@ -204,6 +204,7 @@ public class ForecastEngine {
                         }
                     }
                 }
+                case SKIP_PAYMENT -> items.removeIf(it -> !it.scenario && matches(c.match(), it));
                 case SHIFT_PAYMENT -> {
                     for (Item it : items) {
                         if (!it.scenario && matches(c.match(), it)) {
@@ -325,8 +326,14 @@ public class ForecastEngine {
     }
 
     private static void shift(double[] a, int days) {
-        for (int d = a.length - 1; d >= 1; d--) {
-            a[d] = d - days >= 1 ? a[d - days] : 0;
+        if (days >= 0) {
+            for (int d = a.length - 1; d >= 1; d--) {
+                a[d] = d - days >= 1 ? a[d - days] : 0;
+            }
+        } else {
+            for (int d = 1; d < a.length; d++) {
+                a[d] = d - days < a.length ? a[d - days] : 0;
+            }
         }
     }
 
