@@ -17,6 +17,42 @@ services:
       retries: 5
     networks: [app-net]
 
+  postgres-onec:
+    image: postgres:16
+    container_name: hackathon-postgres-onec
+    environment:
+      POSTGRES_DB: onec
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_onec_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d onec"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [app-net]
+
+  postgres-gos:
+    image: postgres:16
+    container_name: hackathon-postgres-gos
+    environment:
+      POSTGRES_DB: gos
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres_gos_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d gos"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [app-net]
+
   redis:
     image: redis:7
     container_name: hackathon-redis
@@ -35,6 +71,54 @@ services:
       retries: 5
     networks: [app-net]
 
+  onec:
+    build:
+      context: ./1C/1C
+      dockerfile: Dockerfile
+    container_name: hackathon-onec
+    environment:
+      DATA_DIR: /data
+      POSTGRES_HOST: postgres-onec
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: onec
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      BACKEND_URL: http://app:8080
+      INTEGRATION_API_KEY: ${INTEGRATION_API_KEY:-dev-integration-key}
+      SEED_COMPANY_CODES: C001,C002,C003
+    volumes:
+      - ./data:/data:ro
+    ports:
+      - "8081:8081"
+    depends_on:
+      postgres-onec:
+        condition: service_healthy
+    networks: [app-net]
+
+  gos-service:
+    build:
+      context: ./Gos_service
+      dockerfile: Dockerfile
+    container_name: hackathon-gos
+    environment:
+      DATA_DIR: /data
+      POSTGRES_HOST: postgres-gos
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: gos
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      BACKEND_URL: http://app:8080
+      INTEGRATION_API_KEY: ${INTEGRATION_API_KEY:-dev-integration-key}
+      SEED_COMPANY_CODES: C001,C002,C003
+    volumes:
+      - ./data:/data:ro
+    ports:
+      - "8082:8082"
+    depends_on:
+      postgres-gos:
+        condition: service_healthy
+    networks: [app-net]
+
   app:
     build:
       context: .
@@ -49,13 +133,15 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD}
-      APP_ADMIN_USERNAME: ${APP_ADMIN_USERNAME:-admin}
       APP_ADMIN_EMAIL: ${APP_ADMIN_EMAIL:-admin@example.com}
       APP_ADMIN_PASSWORD: ${APP_ADMIN_PASSWORD:-admin123}
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRATION: ${JWT_EXPIRATION:-86400000}
       JWT_REFRESH_EXPIRATION: ${JWT_REFRESH_EXPIRATION:-604800000}
       ML_SERVICE_URL: http://ml-service:8000
+      ONEC_URL: http://onec:8081
+      GOS_URL: http://gos-service:8082
+      INTEGRATION_API_KEY: ${INTEGRATION_API_KEY:-dev-integration-key}
     ports:
       - "8080:8080"
     depends_on:
@@ -63,13 +149,18 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      # ml-service убран — теперь он в другом compose
+      onec:
+        condition: service_started
+      gos-service:
+        condition: service_started
     env_file:
       - .env
     networks: [app-net]
 
 volumes:
   postgres_data:
+  postgres_onec_data:
+  postgres_gos_data:
   redis_data:
 
 networks:

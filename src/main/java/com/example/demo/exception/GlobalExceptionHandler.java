@@ -1,6 +1,7 @@
 package com.example.demo.exception;
 
 import com.example.demo.client.MlServiceClient;
+import org.springframework.dao.InvalidDataAccessApiUsageException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -22,7 +23,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleBadCredentials(BadCredentialsException ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
                 "error", "Unauthorized",
-                "message", "Invalid username or password"
+                "message", "Invalid email or password"
         ));
     }
 
@@ -42,6 +43,39 @@ public class GlobalExceptionHandler {
         body.put("error", "Validation failed");
         body.put("fields", fields);
         return ResponseEntity.badRequest().body(body);
+    }
+
+    @ExceptionHandler(UnknownInnException.class)
+    public ResponseEntity<Map<String, Object>> handleUnknownInn(UnknownInnException ex) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("error", "Unknown INN");
+        body.put("message", ex.getMessage());
+        body.put("unknownInns", ex.getUnknownInns());
+        return ResponseEntity.badRequest().body(body);
+    }
+
+    @ExceptionHandler(ForbiddenInnException.class)
+    public ResponseEntity<Map<String, Object>> handleForbiddenInn(ForbiddenInnException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
+                "error", "Forbidden",
+                "message", ex.getMessage()
+        ));
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, Object>> handleIllegalArgument(IllegalArgumentException ex) {
+        return ResponseEntity.badRequest().body(Map.of(
+                "error", "Bad request",
+                "message", ex.getMessage()
+        ));
+    }
+
+    @ExceptionHandler(InvalidDataAccessApiUsageException.class)
+    public ResponseEntity<Map<String, Object>> handleInvalidSort(InvalidDataAccessApiUsageException ex) {
+        return ResponseEntity.badRequest().body(Map.of(
+                "error", "Bad request",
+                "message", "Invalid sort/page parameters. Use e.g. sort=operationDate,desc"
+        ));
     }
 
     @ExceptionHandler(MlServiceClient.MlServiceException.class)

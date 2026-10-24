@@ -28,19 +28,16 @@ spring:
           max-active: 8
           max-idle: 8
           min-idle: 0
-
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 100MB
   ai:
     openai:
-      # OpenAI-compatible endpoint Pollinations.
-      base-url: https://text.pollinations.ai/v1
-      # Ключ не нужен, но поле должно быть заполнено (можно указать любую строку)
-      api-key: not-needed
+      base-url: http://192.168.31.206:9931/v1
+      api-key: ollama
       chat:
-        model: openai-fast
-
-
-
-
+        model: unsloth/Qwen3.5-9B-GGUF:UD-Q5_K_XL
 
 ml:
   service:
@@ -54,9 +51,15 @@ app:
     expiration: ${JWT_EXPIRATION:86400000}
     refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000}
   admin:
-    username: ${APP_ADMIN_USERNAME:admin}
     email: ${APP_ADMIN_EMAIL:admin@example.com}
     password: ${APP_ADMIN_PASSWORD:admin123}
+  integration:
+    api-key: ${INTEGRATION_API_KEY:dev-integration-key}
+  integrations:
+    onec:
+      url: ${ONEC_URL:http://localhost:8081}
+    gos:
+      url: ${GOS_URL:http://localhost:8082}
 
 server:
   port: 8080
@@ -68,6 +71,3 @@ logging:
     org.hibernate.type.descriptor.sql.BasicBinder: TRACE
     com.example.demo.client: DEBUG
     com.example.demo.security: DEBUG
-
-
-

@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: jdbc:h2:mem:demo-test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
+    url: jdbc:h2:mem:demo-test;MODE=PostgreSQL;CASE_INSENSITIVE_IDENTIFIERS=TRUE;DB_CLOSE_DELAY=-1
     username: sa
     password:
     driver-class-name: org.h2.Driver
@@ -13,6 +13,31 @@ spring:
     show-sql: false
   liquibase:
     enabled: true
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
+
+app:
+  jwt:
+    secret: testSecretKeyForJwtTokenGenerationThatIsAtLeast256BitsLongForHS256
+    expiration: 86400000
+    refresh-expiration: 604800000
+  admin:
+    email: admin@example.com
+    password: admin123
+  integration:
+    api-key: test-integration-key
+  integrations:
+    onec:
+      url: http://localhost:18081
+    gos:
+      url: http://localhost:18082
 
 logging:
   level:

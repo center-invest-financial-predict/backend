@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <changeSet id="005-widen-user-inns" author="hackathon">
+        <preConditions onFail="MARK_RAN">
+            <columnExists tableName="user_inns" columnName="inn"/>
+        </preConditions>
+        <modifyDataType tableName="user_inns" columnName="inn" newDataType="VARCHAR(20)"/>
+    </changeSet>
+
+    <changeSet id="005-widen-companies-inn" author="hackathon">
+        <preConditions onFail="MARK_RAN">
+            <columnExists tableName="companies" columnName="inn"/>
+        </preConditions>
+        <modifyDataType tableName="companies" columnName="inn" newDataType="VARCHAR(20)"/>
+    </changeSet>
+
+    <changeSet id="005-widen-operations-company-inn" author="hackathon">
+        <preConditions onFail="MARK_RAN">
+            <columnExists tableName="operations" columnName="company_inn"/>
+        </preConditions>
+        <modifyDataType tableName="operations" columnName="company_inn" newDataType="VARCHAR(20)"/>
+    </changeSet>
+
+    <changeSet id="005-widen-operations-counterparty-inn" author="hackathon">
+        <preConditions onFail="MARK_RAN">
+            <columnExists tableName="operations" columnName="counterparty_inn"/>
+        </preConditions>
+        <modifyDataType tableName="operations" columnName="counterparty_inn" newDataType="VARCHAR(20)"/>
+    </changeSet>
+
+</databaseChangeLog>

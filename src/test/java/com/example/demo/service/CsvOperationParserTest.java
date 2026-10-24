@@ -1,0 +1,44 @@
+package com.example.demo.service;
+
+import com.example.demo.dto.operation.OperationDto;
+import com.example.demo.entity.Direction;
+import org.junit.jupiter.api.Test;
+
+import java.io.ByteArrayInputStream;
+import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class CsvOperationParserTest {
+
+    private final CsvOperationParser parser = new CsvOperationParser();
+
+    @Test
+    void parsesBomSemicolonLeadingZerosAndEmptyCounterpartyInn() throws Exception {
+        String csv = """
+                \uFEFFcompany_id;operation_id;operation_date;amount;direction;counterparty_inn;counterparty_name;payment_purpose;balance_eod
+                C001;C001-000001;2024-10-01;990.00;Списание;0068275202;ПАО «Банк»;Комиссия;1244821.98
+                C001;C001-000002;2024-10-02;170892.06;Поступление;;ООО «Клиент»;Оплата;1527714.04
+                C001;BAD;not-a-date;x;Списание;1;Name;Purpose;1.00
+                """;
+
+        CsvOperationParser.ParseResult result = parser.parse(
+                new ByteArrayInputStream(csv.getBytes(StandardCharsets.UTF_8))
+        );
+
+        assertThat(result.invalid()).isEqualTo(1);
+        assertThat(result.operations()).hasSize(2);
+
+        OperationDto first = result.operations().get(0);
+        assertThat(first.getCompanyId()).isEqualTo("C001");
+        assertThat(first.getOperationId()).isEqualTo("C001-000001");
+        assertThat(first.getCounterpartyInn()).isEqualTo("0068275202");
+        assertThat(first.getDirection()).isEqualTo(Direction.EXPENSE);
+        assertThat(first.getAmount()).isEqualByComparingTo(new BigDecimal("990.00"));
+
+        OperationDto second = result.operations().get(1);
+        assertThat(second.getDirection()).isEqualTo(Direction.INCOME);
+        assertThat(second.getCounterpartyInn()).isNull();
+    }
+}

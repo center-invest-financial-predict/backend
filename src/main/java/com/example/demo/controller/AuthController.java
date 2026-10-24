@@ -9,6 +9,7 @@ import com.example.demo.entity.User;
 import com.example.demo.security.CustomUserDetailsService;
 import com.example.demo.security.JwtTokenProvider;
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/auth")
+@RequiredArgsConstructor
 public class AuthController {
 
     private final AuthenticationManager authenticationManager;
@@ -29,24 +31,14 @@ public class AuthController {
     private final JwtTokenProvider jwtTokenProvider;
     private final PasswordEncoder passwordEncoder;
 
-    public AuthController(AuthenticationManager authenticationManager,
-                          CustomUserDetailsService userDetailsService,
-                          JwtTokenProvider jwtTokenProvider,
-                          PasswordEncoder passwordEncoder) {
-        this.authenticationManager = authenticationManager;
-        this.userDetailsService = userDetailsService;
-        this.jwtTokenProvider = jwtTokenProvider;
-        this.passwordEncoder = passwordEncoder;
-    }
-
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
         Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.getUsername(), request.getPassword())
+                new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
         );
         SecurityContextHolder.getContext().setAuthentication(authentication);
 
-        User user = (User) userDetailsService.loadUserByUsername(request.getUsername());
+        User user = (User) userDetailsService.loadUserByUsername(request.getEmail());
         String accessToken = jwtTokenProvider.generateToken(user);
         String refreshToken = jwtTokenProvider.generateRefreshToken(user);
 
@@ -55,14 +47,12 @@ public class AuthController {
 
     @PostMapping("/register")
     public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
-        if (userDetailsService.existsByUsername(request.getUsername())) {
-            return ResponseEntity.badRequest().build();
-        }
         if (userDetailsService.existsByEmail(request.getEmail())) {
             return ResponseEntity.badRequest().build();
         }
 
-        User user = new User(null, request.getUsername(),
+        User user = new User(null,
+                request.getLastName(), request.getFirstName(), request.getMiddleName(),
                 passwordEncoder.encode(request.getPassword()),
                 request.getEmail(), Role.USER, null);
 
