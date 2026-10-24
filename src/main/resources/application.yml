@@ -34,16 +34,38 @@ spring:
       max-request-size: 100MB
   ai:
     openai:
-      base-url: http://192.168.31.206:9931/v1
-      api-key: ollama
+      # OpenAI-compatible LLM endpoint of the assistant. The ML Core server (ml.core.url) has no /v1/chat/completions,
+      # so the assistant keeps talking to this endpoint.
+      base-url: ${LLM_BASE_URL:http://192.168.31.206:9931/v1}
+      api-key: ${LLM_API_KEY:ollama}
       chat:
-        model: unsloth/Qwen3.5-9B-GGUF:UD-Q5_K_XL
+        model: ${LLM_MODEL:unsloth/Qwen3.5-9B-GGUF:UD-Q5_K_XL}
 
 ml:
+  # Legacy contract (docs/ml-forecast-openapi.yaml: /forecast, /inference): NOT served by the ML Core server.
   service:
     url: ${ML_SERVICE_URL:http://localhost:8000}
     timeout: 5000
     connect-timeout: 2000
+  # "Cashflow ML Core" (FastAPI, /docs): /v1/forecasts (stub), /v1/chat, /v1/imports/*, /health/*
+  core:
+    enabled: ${ML_CORE_ENABLED:true}
+    url: ${ML_CORE_URL:http://192.168.31.206:18081}
+    connect-timeout-ms: ${ML_CORE_CONNECT_TIMEOUT_MS:2000}
+    read-timeout-ms: ${ML_CORE_READ_TIMEOUT_MS:15000}
+    slow-read-timeout-ms: ${ML_CORE_SLOW_READ_TIMEOUT_MS:90000}
+    history-days: ${ML_CORE_HISTORY_DAYS:365}
+
+forecast:
+  # auto (default) | mlcore: ask the ML Core server for the baseline forecast and use it only if it is real
+  #   (is_stub=false AND cash_gap_probability is calculated); otherwise the built-in engine answers and `source`/`sourceNote`
+  #   in the API say why. builtin: never call the server for the forecast.
+  source: ${FORECAST_SOURCE:auto}
+
+assistant:
+  # ml-core (default) | auto: ML Core /v1/chat first, then the local LLM (spring.ai.openai), then a deterministic summary.
+  # local: only the local LLM.
+  provider: ${ASSISTANT_PROVIDER:ml-core}
 
 app:
   jwt:

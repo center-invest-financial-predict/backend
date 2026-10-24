@@ -2,6 +2,7 @@ package com.example.demo.controller;
 
 import com.example.demo.dto.operation.ImportResult;
 import com.example.demo.dto.operation.IntegrationPushRequest;
+import com.example.demo.forecast.ForecastService;
 import com.example.demo.service.OperationImportService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class IntegrationController {
 
     private final OperationImportService operationImportService;
+    private final ForecastService forecastService;
 
     @PostMapping("/operations")
     public ResponseEntity<ImportResult> pushOperations(@Valid @RequestBody IntegrationPushRequest request) {
@@ -28,6 +30,10 @@ public class IntegrationController {
                 request.getSource(),
                 request.getOperations()
         );
+        if (result.getInserted() > 0) {
+            forecastService.onDataChanged(request.getInn(),
+                    "Получены операции от " + request.getSource().getCode() + ": +" + result.getInserted());
+        }
         return ResponseEntity.ok(result);
     }
 }

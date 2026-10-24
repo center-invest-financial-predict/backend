@@ -10,6 +10,12 @@ public record RegularOperationDto(
         BigDecimal amount,
         String direction,
         LocalDate nextDate,
-        String cadence
+        /** weekly | biweekly | monthly */
+        String cadence,
+        String cadenceLabel,
+        LocalDate lastDate,
+        int occurrences,
+        double confidence,
+        boolean amountUnstable
 ) {
 }

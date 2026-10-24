@@ -5,6 +5,7 @@ import com.example.demo.dto.operation.OperationDto;
 import com.example.demo.entity.Company;
 import com.example.demo.entity.OperationSource;
 import com.example.demo.entity.User;
+import com.example.demo.forecast.ForecastService;
 import com.example.demo.repository.CompanyRepository;
 import com.example.demo.security.CustomUserDetailsService;
 import lombok.RequiredArgsConstructor;
@@ -30,7 +31,7 @@ public class CsvImportService {
     private final OperationImportService operationImportService;
     private final CompanyRepository companyRepository;
     private final CustomUserDetailsService userDetailsService;
-    private final RecalcJournalService recalcJournalService;
+    private final ForecastService forecastService;
 
     /**
      * Import CSV that may contain many company INNs / company_ids.
@@ -89,8 +90,8 @@ public class CsvImportService {
         for (Map.Entry<String, List<OperationDto>> entry : byInn.entrySet()) {
             ImportResult part = operationImportService.upsertBatch(entry.getKey(), OperationSource.CSV, entry.getValue());
             total = total.merge(part);
-            if (part.getInserted() > 0 || part.getDuplicates() > 0) {
-                recalcJournalService.record(
+            if (part.getInserted() > 0) {
+                forecastService.onDataChanged(
                         entry.getKey(),
                         "Загружена выписка CSV: +" + part.getInserted() + ", дублей " + part.getDuplicates()
                 );

@@ -4,6 +4,7 @@ import com.example.demo.client.IntegrationClient;
 import com.example.demo.dto.operation.ImportResult;
 import com.example.demo.dto.operation.OperationDto;
 import com.example.demo.entity.OperationSource;
+import com.example.demo.forecast.ForecastService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
@@ -19,7 +20,7 @@ public class IntegrationSyncService {
 
     private final IntegrationClient integrationClient;
     private final OperationImportService operationImportService;
-    private final RecalcJournalService recalcJournalService;
+    private final ForecastService forecastService;
 
     @Async
     public void syncInnsAsync(Collection<String> inns) {
@@ -38,8 +39,8 @@ public class IntegrationSyncService {
                 List<OperationDto> operations = integrationClient.fetchOperations(source, inn);
                 ImportResult result = operationImportService.upsertBatch(inn, source, operations);
                 total = total.merge(result);
-                if (result.getInserted() > 0 || result.getDuplicates() > 0) {
-                    recalcJournalService.record(
+                if (result.getInserted() > 0) {
+                    forecastService.onDataChanged(
                             inn,
                             "Синхронизация " + source.getCode() + ": +" + result.getInserted()
                                     + ", дублей " + result.getDuplicates()

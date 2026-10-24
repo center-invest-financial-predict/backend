@@ -5,8 +5,10 @@ import java.time.LocalDate;
 import java.util.List;
 
 public record WeeklyCashflowDto(
-        List<WeekBucket> weeks,
-        boolean fromOperations
+        /** past | forecast */
+        String period,
+        LocalDate dataAsOf,
+        List<WeekBucket> weeks
 ) {
     public record WeekBucket(
             LocalDate weekStart,

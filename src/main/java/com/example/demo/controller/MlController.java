@@ -3,11 +3,16 @@ package com.example.demo.controller;
 import com.example.demo.client.MlServiceClient;
 import com.example.demo.dto.ml.InferenceRequest;
 import com.example.demo.dto.ml.InferenceResponse;
+import com.example.demo.dto.ml.MlForecastResultResponse;
+import com.example.demo.service.CompanyAccessService;
+import com.example.demo.service.MlForecastService;
+import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Size;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
 
@@ -22,12 +27,32 @@ public class MlController {
     private final RestTemplate restTemplate;
     private final String mlServiceUrl;
 
+    private final MlForecastService mlForecastService;
+    private final CompanyAccessService companyAccessService;
+
     public MlController(MlServiceClient mlServiceClient,
                         RestTemplate restTemplate,
-                        @Value("${ml.service.url}") String mlServiceUrl) {
+                        @Value("${ml.service.url}") String mlServiceUrl,
+                        MlForecastService mlForecastService,
+                        CompanyAccessService companyAccessService) {
         this.mlServiceClient = mlServiceClient;
         this.restTemplate = restTemplate;
         this.mlServiceUrl = mlServiceUrl;
+        this.mlForecastService = mlForecastService;
+        this.companyAccessService = companyAccessService;
+    }
+
+    @GetMapping("/companies/{inn}/forecast")
+    @Operation(summary = "ML cash-flow forecast and cash gaps for a company",
+            description = "Aggregates daily history from operations and calls ml-service POST /forecast. "
+                    + "gradient_boosting needs >= 90 days of history, dynamical >= 30.")
+    public ResponseEntity<MlForecastResultResponse> forecast(
+            @PathVariable String inn,
+            @RequestParam(defaultValue = "30") int horizonDays,
+            @RequestParam(defaultValue = MlForecastService.MODEL_GRADIENT_BOOSTING) String model,
+            Authentication authentication) {
+        companyAccessService.ensureOwnedByUser(authentication.getName(), inn);
+        return ResponseEntity.ok(mlForecastService.forecast(inn, horizonDays, model));
     }
 
     @PostMapping("/inference")

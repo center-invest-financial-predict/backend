@@ -1,0 +1,308 @@
+openapi: 3.0.3
+info:
+  title: ML service - cash flow forecast contract
+  version: 1.0.0
+  description: |
+    Contract between the Java backend and the Python ml-service for cash-flow
+    / cash-gap forecasting. Base URL is `${ML_SERVICE_URL}` (docker: `http://ml-service:8000`).
+
+    The ml-service is stateless: the backend aggregates daily history from the
+    `operations` table and sends it in every request. The ml-service has no DB access.
+
+    Models (derived from the reference scripts):
+
+    * `gradient_boosting` - `HistGradientBoostingRegressor` loaded from
+      `cash_flow_model.pkl`, `encoder.pkl` (OrdinalEncoder on `[industry, legal_form]`,
+      unknown -> -1) and `features.pkl`. Predicts daily net cash flow recursively;
+      `balance(t) = balance(t-1) + net_cf(t)`. Needs >= 90 days of history
+      (lag 30 + 60 rows window).
+    * `dynamical` - `DynamicalCashFlowForecaster`, fitted on the supplied history
+      at request time (trend + weekly + day-of-month harmonics). Needs >= 30 days.
+
+    Preprocessing contract (already done by the backend, identical to the scripts):
+    daily sums of inflow/outflow, missing days filled with 0, `balance_eod`
+    forward-filled then back-filled. `history` is sorted by date ascending with
+    no gaps.
+
+    Artifacts were pickled with scikit-learn 1.6.1 - pin sklearn/numpy/pandas/joblib
+    versions in the ml-service.
+
+    Cash gap = a forecast day with `predicted_balance < 0`.
+servers:
+  - url: http://ml-service:8000
+    description: docker-compose network
+  - url: http://localhost:8000
+    description: local
+paths:
+  /forecast:
+    post:
+      operationId: forecast
+      summary: Forecast balance and cash gaps for one company
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForecastRequest'
+            example:
+              company_inn: "7701234567"
+              company_code: "C001"
+              industry: "Розничная торговля"
+              legal_form: "ООО"
+              model: gradient_boosting
+              horizon_days: 30
+              history:
+                - { date: "2026-07-01", inflow: 120000.0, outflow: 95000.0, balance_eod: 400000.0 }
+                - { date: "2026-07-02", inflow: 0.0, outflow: 0.0, balance_eod: 400000.0 }
+      responses:
+        '200':
+          description: Forecast
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForecastResponse'
+              example:
+                model: gradient_boosting
+                model_version: sklearn-1.6.1
+                company_inn: "7701234567"
+                last_history_date: "2026-10-23"
+                start_balance: 400000.0
+                horizon_days: 30
+                points:
+                  - { date: "2026-10-24", predicted_net_cash_flow: -12000.0, predicted_balance: 388000.0 }
+                cash_gaps:
+                  - { date: "2026-11-12", predicted_balance: -30100.0, deficit: 30100.0 }
+                first_gap: { date: "2026-11-12", predicted_balance: -30100.0, deficit: 30100.0 }
+                min_balance: { date: "2026-11-12", predicted_balance: -30100.0 }
+                inference_time_ms: 12.4
+        '400':
+          description: Not enough history for the requested model
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: INSUFFICIENT_HISTORY
+                message: "gradient_boosting requires at least 90 days of history, got 41"
+        '422':
+          description: Invalid `horizon_days`, `model` or malformed `history`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: VALIDATION_ERROR
+                message: "horizon_days must be in range 1..90"
+        '503':
+          description: Model artifacts are not loaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: MODEL_NOT_LOADED
+                message: "cash_flow_model.pkl is not loaded"
+  /models:
+    get:
+      operationId: listModels
+      summary: Available models and their history requirements
+      responses:
+        '200':
+          description: Models
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  models:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ModelInfo'
+              example:
+                models:
+                  - { name: gradient_boosting, version: sklearn-1.6.1, min_history_days: 90, max_horizon_days: 90, loaded: true }
+                  - { name: dynamical, version: "1.0", min_history_days: 30, max_horizon_days: 90, loaded: true }
+  /health:
+    get:
+      operationId: health
+      summary: Liveness / readiness
+      responses:
+        '200':
+          description: Service is up
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: UP
+components:
+  schemas:
+    ModelName:
+      type: string
+      enum: [gradient_boosting, dynamical]
+      default: gradient_boosting
+    ForecastRequest:
+      type: object
+      required: [company_inn, model, horizon_days, history]
+      properties:
+        company_inn:
+          type: string
+          example: "7701234567"
+        company_code:
+          type: string
+          nullable: true
+          description: Internal company code (C001...), informational.
+          example: C001
+        industry:
+          type: string
+          nullable: true
+          description: Input of the OrdinalEncoder. null/unknown is encoded as -1.
+        legal_form:
+          type: string
+          nullable: true
+          description: Input of the OrdinalEncoder. null/unknown is encoded as -1.
+        model:
+          $ref: '#/components/schemas/ModelName'
+        horizon_days:
+          type: integer
+          minimum: 1
+          maximum: 90
+          default: 30
+        history:
+          type: array
+          description: Daily history, ascending by date, no gaps. >= 90 items for gradient_boosting, >= 30 for dynamical.
+          minItems: 30
+          items:
+            $ref: '#/components/schemas/HistoryDay'
+    HistoryDay:
+      type: object
+      required: [date, inflow, outflow, balance_eod]
+      properties:
+        date:
+          type: string
+          format: date
+        inflow:
+          type: number
+          format: double
+          description: Sum of INCOME operations for the day (0 if none).
+        outflow:
+          type: number
+          format: double
+          description: Sum of EXPENSE operations for the day (0 if none).
+        balance_eod:
+          type: number
+          format: double
+          description: End-of-day balance (forward/back filled). net_cash_flow = inflow - outflow.
+    ForecastResponse:
+      type: object
+      required: [model, company_inn, last_history_date, start_balance, horizon_days, points, cash_gaps]
+      properties:
+        model:
+          $ref: '#/components/schemas/ModelName'
+        model_version:
+          type: string
+          nullable: true
+        company_inn:
+          type: string
+        last_history_date:
+          type: string
+          format: date
+          description: Last day of the supplied history. First forecast day is last_history_date + 1.
+        start_balance:
+          type: number
+          format: double
+          description: balance_eod of the last history day.
+        horizon_days:
+          type: integer
+        points:
+          type: array
+          description: Exactly horizon_days items, ascending by date.
+          items:
+            $ref: '#/components/schemas/ForecastPoint'
+        cash_gaps:
+          type: array
+          description: Points with predicted_balance < 0 (empty if none).
+          items:
+            $ref: '#/components/schemas/CashGap'
+        first_gap:
+          allOf:
+            - $ref: '#/components/schemas/CashGap'
+          nullable: true
+          description: First element of cash_gaps, null if there are no gaps.
+        min_balance:
+          allOf:
+            - $ref: '#/components/schemas/MinBalance'
+          description: Day with the lowest predicted balance on the horizon.
+        inference_time_ms:
+          type: number
+          format: double
+          nullable: true
+    ForecastPoint:
+      type: object
+      required: [date, predicted_net_cash_flow, predicted_balance]
+      properties:
+        date:
+          type: string
+          format: date
+        predicted_net_cash_flow:
+          type: number
+          format: double
+        predicted_balance:
+          type: number
+          format: double
+        control_input_u:
+          type: number
+          format: double
+          nullable: true
+          description: Only for `dynamical` (equals predicted_net_cash_flow).
+    CashGap:
+      type: object
+      required: [date, predicted_balance, deficit]
+      properties:
+        date:
+          type: string
+          format: date
+        predicted_balance:
+          type: number
+          format: double
+          description: Negative balance.
+        deficit:
+          type: number
+          format: double
+          description: abs(predicted_balance).
+    MinBalance:
+      type: object
+      required: [date, predicted_balance]
+      properties:
+        date:
+          type: string
+          format: date
+        predicted_balance:
+          type: number
+          format: double
+    ModelInfo:
+      type: object
+      required: [name, min_history_days, max_horizon_days, loaded]
+      properties:
+        name:
+          $ref: '#/components/schemas/ModelName'
+        version:
+          type: string
+          nullable: true
+        min_history_days:
+          type: integer
+        max_horizon_days:
+          type: integer
+        loaded:
+          type: boolean
+    Error:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+          enum: [INSUFFICIENT_HISTORY, VALIDATION_ERROR, MODEL_NOT_LOADED]
+        message:
+          type: string

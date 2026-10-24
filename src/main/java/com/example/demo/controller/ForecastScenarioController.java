@@ -40,7 +40,7 @@ public class ForecastScenarioController {
     }
 
     @GetMapping("/examples")
-    @Operation(summary = "Ready-made scenario examples (stub)")
+    @Operation(summary = "What-if examples with results calculated on current data")
     public ResponseEntity<List<ScenarioDto.ExampleDto>> examples(
             @PathVariable String inn,
             Authentication authentication
@@ -50,7 +50,7 @@ public class ForecastScenarioController {
     }
 
     @PostMapping("/preview")
-    @Operation(summary = "Preview forecast for conditions without saving (stub ML)")
+    @Operation(summary = "Recalculate the forecast for typed conditions without saving")
     public ResponseEntity<ForecastSeriesResponse> preview(
             @PathVariable String inn,
             @RequestBody ScenarioDto.PreviewRequest request,

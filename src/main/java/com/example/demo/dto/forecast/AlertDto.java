@@ -5,6 +5,9 @@ import java.time.LocalDate;
 
 public record AlertDto(
         String id,
+        /** GAP | RISK | BELOW_MIN | STRESS | OVERDUE | DATA */
+        String type,
+        /** critical | warning | info */
         String severity,
         String title,
         String description,

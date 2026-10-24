@@ -2,6 +2,8 @@ package com.example.demo.client;
 
 import com.example.demo.dto.ml.InferenceRequest;
 import com.example.demo.dto.ml.InferenceResponse;
+import com.example.demo.dto.ml.MlForecastRequest;
+import com.example.demo.dto.ml.MlForecastResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -43,6 +45,33 @@ public class MlServiceClient {
             return response.getBody();
         } catch (RestClientException e) {
             log.error("ML service call failed: {}", e.getMessage());
+            throw new MlServiceException("Failed to call ML service", e);
+        }
+    }
+
+    /**
+     * Cash-flow forecast: {@code POST {ml.service.url}/forecast}.
+     * Contract: docs/ml-forecast-openapi.yaml.
+     */
+    public MlForecastResponse forecast(MlForecastRequest request) {
+        String url = baseUrl + "/forecast";
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<MlForecastRequest> entity = new HttpEntity<>(request, headers);
+
+        try {
+            log.debug("Calling ML forecast at {} (inn={}, model={}, horizon={}, historyDays={})",
+                    url, request.companyInn(), request.model(), request.horizonDays(),
+                    request.history() == null ? 0 : request.history().size());
+            ResponseEntity<MlForecastResponse> response = restTemplate.exchange(
+                    url, HttpMethod.POST, entity, MlForecastResponse.class);
+            MlForecastResponse body = response.getBody();
+            if (body == null || body.points() == null) {
+                throw new MlServiceException("ML service returned an empty forecast", null);
+            }
+            return body;
+        } catch (RestClientException e) {
+            log.error("ML forecast call failed: {}", e.getMessage());
             throw new MlServiceException("Failed to call ML service", e);
         }
     }

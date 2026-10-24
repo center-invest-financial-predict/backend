@@ -6,7 +6,8 @@ spring:
     driver-class-name: org.h2.Driver
   jpa:
     hibernate:
-      ddl-auto: validate
+      # H2 maps TEXT columns to CLOB, which Hibernate's validate rejects; the schema comes from Liquibase anyway.
+      ddl-auto: none
     properties:
       hibernate:
         dialect: org.hibernate.dialect.H2Dialect
@@ -23,7 +24,21 @@ spring:
       - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
       - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
 
+ml:
+  core:
+    # tests never call the real ML Core server
+    enabled: false
+    url: http://127.0.0.1:1
+
+forecast:
+  source: builtin
+
+assistant:
+  provider: local
+
 app:
+  assistant:
+    timeout-seconds: 3
   jwt:
     secret: testSecretKeyForJwtTokenGenerationThatIsAtLeast256BitsLongForHS256
     expiration: 86400000

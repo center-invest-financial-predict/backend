@@ -86,6 +86,32 @@ public class GlobalExceptionHandler {
         ));
     }
 
+    @ExceptionHandler(InsufficientHistoryException.class)
+    public ResponseEntity<Map<String, Object>> handleInsufficientHistory(InsufficientHistoryException ex) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("error", "INSUFFICIENT_HISTORY");
+        body.put("message", ex.getMessage());
+        body.put("requiredDays", ex.getRequiredDays());
+        body.put("actualDays", ex.getActualDays());
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(body);
+    }
+
+    /** ML Core refused the payload -> 422; disabled / unreachable / timeout / 5xx -> 503. */
+    @ExceptionHandler(MlCoreException.class)
+    public ResponseEntity<Map<String, Object>> handleMlCore(MlCoreException ex) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        if (ex.isRejected()) {
+            body.put("error", "ML_CORE_REJECTED");
+            body.put("message", ex.getUpstreamBody() != null && !ex.getUpstreamBody().isBlank()
+                    ? ex.getUpstreamBody() : ex.getMessage());
+            body.put("upstreamStatus", ex.getUpstreamStatus());
+            return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(body);
+        }
+        body.put("error", "ML_CORE_UNAVAILABLE");
+        body.put("message", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(body);
+    }
+
     @ExceptionHandler(MlServiceClient.MlServiceException.class)
     public ResponseEntity<Map<String, Object>> handleMlService(MlServiceClient.MlServiceException ex) {
         Throwable cause = ex.getCause();

@@ -1,6 +1,7 @@
 package com.example.demo.dto.operation;
 
 import com.example.demo.entity.Direction;
+import com.example.demo.forecast.CategoryClassifier;
 import com.example.demo.entity.Operation;
 import com.example.demo.entity.OperationSource;
 import lombok.Builder;
@@ -24,6 +25,8 @@ public class OperationResponse {
     private String counterpartyName;
     private String paymentPurpose;
     private BigDecimal balanceEod;
+    /** Derived by rules (see CategoryClassifier); not stored. */
+    private String category;
     private OperationSource source;
     private LocalDateTime createdAt;
 
@@ -39,6 +42,7 @@ public class OperationResponse {
                 .counterpartyName(operation.getCounterpartyName())
                 .paymentPurpose(operation.getPaymentPurpose())
                 .balanceEod(operation.getBalanceEod())
+                .category(CategoryClassifier.DEFAULT.classify(operation))
                 .source(operation.getSource())
                 .createdAt(operation.getCreatedAt())
                 .build();

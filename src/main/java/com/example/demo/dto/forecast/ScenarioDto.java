@@ -10,6 +10,10 @@ public record ScenarioDto(
         String companyInn,
         String name,
         Object conditions,
+        /** Human readable form of the conditions (Russian). */
+        java.util.List<String> conditionsText,
+        /** Result of the scenario recalculated on current data; null while history is insufficient. */
+        ForecastSeriesResponse.Summary summary,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {
@@ -37,7 +41,8 @@ public record ScenarioDto(
             Object conditions,
             java.math.BigDecimal minBalance,
             java.time.LocalDate gapDate,
-            java.math.BigDecimal gapAmount
+            java.math.BigDecimal gapAmount,
+            java.math.BigDecimal gapProbability
     ) {
     }
 }

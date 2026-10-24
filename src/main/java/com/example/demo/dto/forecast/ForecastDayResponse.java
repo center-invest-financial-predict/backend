@@ -10,11 +10,16 @@ public record ForecastDayResponse(
         BigDecimal income,
         BigDecimal expense,
         BigDecimal endBalance,
+        /** Statistical (non-scheduled) part of the day. */
         BigDecimal otherIncomeForecast,
+        BigDecimal otherExpenseForecast,
         BigDecimal negativeEndBalance,
+        BigDecimal confidenceLow,
+        BigDecimal confidenceHigh,
         List<DayEvent> events,
-        boolean stub
+        Long scenarioId
 ) {
-    public record DayEvent(String title, String source, BigDecimal amount, String direction) {
+    public record DayEvent(String title, String source, BigDecimal amount, String direction,
+                           String category, String basis) {
     }
 }

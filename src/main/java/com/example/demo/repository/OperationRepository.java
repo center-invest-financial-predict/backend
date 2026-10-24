@@ -88,5 +88,13 @@ public interface OperationRepository extends JpaRepository<Operation, Long> {
             """)
     Optional<LocalDate> findMaxDateBySource(@Param("inn") String inn, @Param("source") OperationSource source);
 
+    @Query("SELECT MAX(o.operationDate) FROM Operation o WHERE o.companyInn = :inn")
+    Optional<LocalDate> findLastOperationDate(@Param("inn") String inn);
+
+    @Query("SELECT MIN(o.operationDate) FROM Operation o WHERE o.companyInn = :inn")
+    Optional<LocalDate> findFirstOperationDate(@Param("inn") String inn);
+
     long countByCompanyInn(String companyInn);
+
+    long countByCompanyInnAndSource(String companyInn, OperationSource source);
 }
