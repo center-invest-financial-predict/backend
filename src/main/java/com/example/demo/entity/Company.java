@@ -31,6 +31,10 @@ public class Company {
     @Column(name = "industry")
     private String industry;
 
+    /** The INN was unknown to the system and was added by a user: its CSV is read as its own statement. */
+    @Column(name = "user_created", nullable = false)
+    private boolean userCreated;
+
     public Company(String inn, String companyCode, String name, String legalForm, String industry) {
         this.inn = inn;
         this.companyCode = companyCode;

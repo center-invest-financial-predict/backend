@@ -13,20 +13,14 @@ import com.example.demo.forecast.ForecastService;
 import com.example.demo.forecast.RegularItem;
 import com.example.demo.repository.CashEventRepository;
 import lombok.RequiredArgsConstructor;
-import org.apache.commons.csv.CSVFormat;
-import org.apache.commons.csv.CSVParser;
-import org.apache.commons.csv.CSVRecord;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.YearMonth;
-import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -42,7 +36,6 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class CashEventService {
 
-    private static final DateTimeFormatter RU_DATE = DateTimeFormatter.ofPattern("dd.MM.yyyy");
     private static final String CSV_SOURCE = "future-csv";
 
     private final CashEventRepository cashEventRepository;
@@ -141,27 +134,44 @@ public class CashEventService {
     /** Parses the CSV and reports every line (valid or with an error) without saving anything. */
     public CashEventImportDto.PreviewResponse previewCsv(MultipartFile file) throws IOException {
         List<CashEventImportDto.Row> rows = new ArrayList<>();
-        try (CSVParser parser = CSVFormat.DEFAULT.builder()
-                .setHeader()
-                .setSkipHeaderRecord(true)
-                .setIgnoreEmptyLines(true)
-                .setTrim(true)
-                .build()
-                .parse(new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8))) {
-            for (CSVRecord record : parser) {
-                int line = (int) record.getRecordNumber() + 1;
-                try {
-                    LocalDate date = parseDate(required(record, "date", "event_date", "дата"));
-                    String title = required(record, "title", "name", "название");
-                    Direction direction = Direction.from(required(record, "direction", "направление"));
-                    BigDecimal amount = new BigDecimal(
-                            required(record, "amount", "сумма").replace(" ", "").replace(',', '.'));
-                    requirePositive(amount);
-                    rows.add(new CashEventImportDto.Row(line, date, title, direction, amount,
-                            optional(record, "category"), true, null));
-                } catch (IllegalArgumentException | DateTimeParseException e) {
-                    rows.add(new CashEventImportDto.Row(line, null, null, null, null, null, false, e.getMessage()));
+        // same reader as for the statement: UTF-8/Windows-1251, ';' ',' or TAB, .xlsx, Excel dates and numbers
+        List<List<String>> table = CsvOperationParser.readTable(file.getInputStream().readAllBytes());
+        int headerIdx = 0;
+        while (headerIdx < table.size() && CsvOperationParser.isBlankRow(table.get(headerIdx))) {
+            headerIdx++;
+        }
+        if (headerIdx >= table.size()) {
+            return new CashEventImportDto.PreviewResponse(rows, 0, 0);
+        }
+        List<String> header = table.get(headerIdx).stream().map(CsvOperationParser::normalizeHeader).toList();
+        List<String> rawHeader = table.get(headerIdx).stream().map(CsvOperationParser::cleanCell).toList();
+
+        for (int i = headerIdx + 1; i < table.size(); i++) {
+            List<String> record = table.get(i);
+            if (CsvOperationParser.isBlankRow(record)) {
+                continue;
+            }
+            int line = i + 1;
+            try {
+                LocalDate date = CsvOperationParser.parseDate(
+                        required(header, rawHeader, record, DATE_COLUMNS));
+                String title = required(header, rawHeader, record, TITLE_COLUMNS);
+                BigDecimal amount = CsvOperationParser.parseNumber(
+                        required(header, rawHeader, record, AMOUNT_COLUMNS), "amount");
+                String directionRaw = optional(header, record, DIRECTION_COLUMNS);
+                Direction direction;
+                if (directionRaw != null) {
+                    direction = CsvOperationParser.parseDirection(directionRaw);
+                } else {
+                    // no direction column: the sign of the amount tells
+                    direction = amount.signum() < 0 ? Direction.EXPENSE : Direction.INCOME;
+                    amount = amount.abs();
                 }
+                requirePositive(amount);
+                rows.add(new CashEventImportDto.Row(line, date, title, direction, amount,
+                        optional(header, record, CATEGORY_COLUMNS), true, null));
+            } catch (IllegalArgumentException | DateTimeParseException e) {
+                rows.add(new CashEventImportDto.Row(line, null, null, null, null, null, false, e.getMessage()));
             }
         }
         int valid = (int) rows.stream().filter(CashEventImportDto.Row::valid).count();
@@ -242,28 +252,48 @@ public class CashEventService {
         return dto;
     }
 
-    private static LocalDate parseDate(String value) {
-        try {
-            return LocalDate.parse(value);
-        } catch (DateTimeParseException e) {
-            return LocalDate.parse(value, RU_DATE);
-        }
-    }
+    private static final List<String> DATE_COLUMNS = List.of("date", "event_date", "дата", "дата_платежа",
+            "дата_операции", "operation_date", "planned_date", "плановая_дата");
+    private static final List<String> TITLE_COLUMNS = List.of("title", "name", "название", "наименование",
+            "назначение", "назначение_платежа", "payment_purpose", "описание", "контрагент", "counterparty_name",
+            "counterparty");
+    private static final List<String> AMOUNT_COLUMNS = List.of("amount", "сумма", "сумма_платежа", "sum");
+    private static final List<String> DIRECTION_COLUMNS = List.of("direction", "направление", "тип", "type",
+            "тип_операции", "вид_операции");
+    private static final List<String> CATEGORY_COLUMNS = List.of("category", "категория");
 
-    private static String required(CSVRecord record, String... names) {
+    /** First non-blank value among the alternative column names; tells what was found when none matches. */
+    private static String required(List<String> header, List<String> rawHeader, List<String> record,
+                                   List<String> names) {
+        boolean columnFound = false;
         for (String name : names) {
-            if (record.isMapped(name) && record.get(name) != null && !record.get(name).isBlank()) {
-                return record.get(name).trim();
+            int idx = header.indexOf(name);
+            if (idx < 0) {
+                continue;
+            }
+            columnFound = true;
+            String value = idx < record.size() ? CsvOperationParser.cleanCell(record.get(idx)) : "";
+            if (!value.isBlank()) {
+                return value;
             }
         }
-        throw new IllegalArgumentException("Missing CSV column: " + String.join("/", names));
+        if (columnFound) {
+            throw new IllegalArgumentException("Пустое значение в колонке " + names.get(0));
+        }
+        throw new IllegalArgumentException("Не найдена колонка " + String.join("/", names.subList(0, 3))
+                + ". Колонки в файле: " + rawHeader);
     }
 
-    private static String optional(CSVRecord record, String name) {
-        if (!record.isMapped(name)) {
-            return null;
+    private static String optional(List<String> header, List<String> record, List<String> names) {
+        for (String name : names) {
+            int idx = header.indexOf(name);
+            if (idx >= 0 && idx < record.size()) {
+                String value = CsvOperationParser.cleanCell(record.get(idx));
+                if (!value.isBlank()) {
+                    return value;
+                }
+            }
         }
-        String v = record.get(name);
-        return v == null || v.isBlank() ? null : v.trim();
+        return null;
     }
 }

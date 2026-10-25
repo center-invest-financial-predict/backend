@@ -26,6 +26,7 @@ import java.util.Set;
 public class CompanyOnboardingService {
 
     private final CompanyRepository companyRepository;
+    private final CompanyAccessService companyAccessService;
     private final CustomUserDetailsService userDetailsService;
     private final CashForecastService cashForecastService;
     private final IntegrationSyncService integrationSyncService;
@@ -50,8 +51,10 @@ public class CompanyOnboardingService {
             throw new IllegalArgumentException("Выберите хотя бы один источник данных");
         }
 
-        Company company = companyRepository.save(new Company(inn, CompanyAccessService.externalCompanyCode(inn),
-                request.name().trim(), blankToNull(request.legalForm()), blankToNull(request.industry())));
+        Company created = new Company(inn, companyAccessService.nextCompanyCode(),
+                request.name().trim(), blankToNull(request.legalForm()), blankToNull(request.industry()));
+        created.setUserCreated(true);
+        Company company = companyRepository.save(created);
 
         User user = (User) userDetailsService.loadUserByUsername(email);
         Set<String> inns = new LinkedHashSet<>(user.getInns() == null ? Set.of() : user.getInns());

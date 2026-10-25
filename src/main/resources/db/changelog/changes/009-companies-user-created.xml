@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!-- companies the user brought in (the system had not seen the INN): their CSV is read as their own statement -->
+    <changeSet id="009-companies-user-created" author="hackathon">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists tableName="companies" columnName="user_created"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="companies">
+            <column name="user_created" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+    </changeSet>
+</databaseChangeLog>

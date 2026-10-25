@@ -175,6 +175,26 @@ class FrontGapsIntegrationTest {
                 .andExpect(status().isForbidden());
     }
 
+    @Test
+    void importPreviewAcceptsExcelStyleSemicolonFileWithRussianDatesAndOperationColumns() throws Exception {
+        pushHistory();
+        String csv = "operation_date;payment_purpose;direction;amount\r\n"
+                + "10.10.2026;Аренда склада;Списание;50 000,50\r\n"
+                + ";;;\r\n";
+        MockMultipartFile file = new MockMultipartFile("file", "events.csv", "text/csv",
+                csv.getBytes(java.nio.charset.Charset.forName("windows-1251")));
+
+        MvcResult preview = mockMvc.perform(multipart(BASE + "/events/import/preview").file(file)
+                        .header("Authorization", "Bearer " + ownerToken))
+                .andExpect(status().isOk()).andReturn();
+        JsonNode p = json.readTree(preview.getResponse().getContentAsString());
+        assertThat(p.get("validCount").asInt()).isEqualTo(1);
+        assertThat(p.get("invalidCount").asInt()).isZero();
+        assertThat(p.get("rows").get(0).get("eventDate").asText()).isEqualTo("2026-10-10");
+        assertThat(p.get("rows").get(0).get("title").asText()).isEqualTo("Аренда склада");
+        assertThat(p.get("rows").get(0).get("amount").decimalValue()).isEqualByComparingTo("50000.50");
+    }
+
     // ---------------------------------------------------------------- sources toggle
 
     @Test

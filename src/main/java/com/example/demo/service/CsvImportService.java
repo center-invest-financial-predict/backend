@@ -27,6 +27,8 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class CsvImportService {
 
+    private static final int MAX_SKIP_REASONS = 10;
+
     private final CsvOperationParser csvOperationParser;
     private final OperationImportService operationImportService;
     private final CompanyRepository companyRepository;
@@ -65,9 +67,20 @@ public class CsvImportService {
         CsvOperationParser.ParseResult parsed = csvOperationParser.parse(inputStream);
         Map<String, String> codeToInn = loadCodeToInn(parsed.operations());
 
-        boolean externalCompany = forceInn != null && companyRepository.findById(forceInn)
-                .map(c -> CompanyAccessService.externalCompanyCode(forceInn).equals(c.getCompanyCode()))
-                .orElse(false);
+        Company target = forceInn == null ? null : companyRepository.findById(forceInn).orElse(null);
+        String forceCode = target == null ? null : target.getCompanyCode();
+        // A company the user brought in has no statement format of ours: the file is its own statement, whatever
+        // company_id the exporting system put there (one code or none). Only a file mixing several companies
+        // has to be told apart by the company's code or company_inn.
+        boolean ownStatement = target != null && target.isUserCreated();
+        Set<String> codesInFile = new HashSet<>();
+        for (OperationDto dto : parsed.operations()) {
+            boolean noInn = dto.getCompanyInn() == null || dto.getCompanyInn().isBlank();
+            if (noInn && dto.getCompanyId() != null && !dto.getCompanyId().isBlank()) {
+                codesInFile.add(dto.getCompanyId().trim());
+            }
+        }
+        boolean singleCompanyFile = codesInFile.size() <= 1;
 
         Map<String, List<OperationDto>> byInn = new LinkedHashMap<>();
         // reason -> number of rows; ownership is checked first, duplicates are looked for only afterwards
@@ -81,6 +94,30 @@ public class CsvImportService {
                     ? null : dto.getCompanyInn().trim();
             String codeInn = code == null || code.isBlank() ? null : codeToInn.get(code);
 
+            if (ownStatement) {
+                String own;
+                if (explicitInn != null) {
+                    own = explicitInn;
+                } else if (code == null || code.isBlank() || singleCompanyFile || code.equals(forceCode)) {
+                    own = forceInn;
+                } else {
+                    skipped++;
+                    skipReasons.merge("в файле несколько компаний (company_id " + String.join(", ",
+                            codesInFile.stream().sorted().limit(5).toList()) + (codesInFile.size() > 5 ? "…" : "")
+                            + "); в компанию " + forceInn + " грузятся строки с её кодом " + forceCode
+                            + " или с company_inn = " + forceInn, 1, Integer::sum);
+                    continue;
+                }
+                if (!forceInn.equals(own)) {
+                    skipped++;
+                    skipReasons.merge("company_inn " + own + " не совпадает с ИНН " + forceInn
+                            + ", для которого загружен файл", 1, Integer::sum);
+                    continue;
+                }
+                byInn.computeIfAbsent(own, key -> new ArrayList<>()).add(dto);
+                continue;
+            }
+
             // company_id and INN given in the row must agree with each other
             if (explicitInn != null && codeInn != null && !explicitInn.equals(codeInn)) {
                 skipped++;
@@ -91,24 +128,19 @@ public class CsvImportService {
             String resolvedInn = explicitInn != null ? explicitInn : codeInn;
             if (resolvedInn == null) {
                 if (code != null && !code.isBlank()) {
-                    if (forceInn != null && externalCompany) {
-                        // a company registered by the user: its own statement carries a code we have never seen
-                        resolvedInn = forceInn;
+                    // a company_id that is not in our directory can never match the INN we import into
+                    if (forceInn != null) {
+                        skipped++;
+                        skipReasons.merge("company_id " + code + " неизвестен; код компании " + forceInn + " — "
+                                + forceCode + " (укажите его в company_id или добавьте колонку company_inn)",
+                                1, Integer::sum);
                     } else {
-                        // a company_id that is not in our directory can never match the INN we import into
-                        if (forceInn != null) {
-                            skipped++;
-                            skipReasons.merge("company_id " + code + " неизвестен, файл загружается для ИНН "
-                                    + forceInn, 1, Integer::sum);
-                        } else {
-                            unresolved++;
-                        }
-                        continue;
+                        unresolved++;
                     }
-                } else {
-                    // statement without any company marker: it belongs to the INN it is uploaded for
-                    resolvedInn = forceInn;
+                    continue;
                 }
+                // statement without any company marker: it belongs to the INN it is uploaded for
+                resolvedInn = forceInn;
             }
             if (resolvedInn == null) {
                 unresolved++;
@@ -130,7 +162,19 @@ public class CsvImportService {
         }
 
         List<String> errors = new ArrayList<>(parsed.errors());
-        skipReasons.forEach((reason, count) -> errors.add("Пропущено строк: " + count + " — " + reason));
+        int shown = 0;
+        int hiddenRows = 0;
+        for (Map.Entry<String, Integer> reason : skipReasons.entrySet()) {
+            if (shown < MAX_SKIP_REASONS) {
+                errors.add("Пропущено строк: " + reason.getValue() + " — " + reason.getKey());
+                shown++;
+            } else {
+                hiddenRows += reason.getValue();
+            }
+        }
+        if (hiddenRows > 0) {
+            errors.add("Ещё пропущено строк: " + hiddenRows + " (по другим компаниям)");
+        }
         ImportResult total = new ImportResult(0, 0, parsed.invalid() + unresolved, skipped, errors);
         for (Map.Entry<String, List<OperationDto>> entry : byInn.entrySet()) {
             ImportResult part = operationImportService.upsertBatch(entry.getKey(), OperationSource.CSV, entry.getValue());

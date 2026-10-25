@@ -88,9 +88,12 @@ public class CsvOperationParser {
     );
 
     public ParseResult parse(InputStream inputStream) throws IOException {
-        byte[] bytes = inputStream.readAllBytes();
-        List<List<String>> rows = isZip(bytes) ? readXlsx(bytes) : readCsv(bytes);
-        return toOperations(rows);
+        return toOperations(readTable(inputStream.readAllBytes()));
+    }
+
+    /** Raw rows (header included) of a CSV in any common Excel flavour, or of the first sheet of an .xlsx. */
+    static List<List<String>> readTable(byte[] bytes) throws IOException {
+        return isZip(bytes) ? readXlsx(bytes) : readCsv(bytes);
     }
 
     // ---------------------------------------------------------------- rows -> operations
@@ -276,7 +279,7 @@ public class CsvOperationParser {
         }
     }
 
-    private static String normalizeHeader(String header) {
+    static String normalizeHeader(String header) {
         if (header == null) {
             return "";
         }
@@ -284,7 +287,7 @@ public class CsvOperationParser {
         return value.replaceAll("[\\s\\-]+", "_");
     }
 
-    private static String cleanCell(String value) {
+    static String cleanCell(String value) {
         String v = value;
         if (!v.isEmpty() && v.charAt(0) == '\uFEFF') {
             v = v.substring(1);
@@ -292,7 +295,7 @@ public class CsvOperationParser {
         return v.replace("\u00A0", " ").trim();
     }
 
-    private static boolean isBlankRow(List<String> row) {
+    static boolean isBlankRow(List<String> row) {
         for (String cell : row) {
             if (cell != null && !cleanCell(cell).isEmpty()) {
                 return false;

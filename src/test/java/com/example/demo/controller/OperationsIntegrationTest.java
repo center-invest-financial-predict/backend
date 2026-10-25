@@ -79,10 +79,17 @@ class OperationsIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.inns[0]").value(inn));
 
+        // the new company got the next free code of the C001, C002, ... family
+        String code = companyCode(inn);
+        assertThat(code).matches("C\\d{3}");
+        assertThat(Integer.parseInt(code.substring(1))).isGreaterThan(150);
+
+        // the file is this company's statement whatever company_id the exporting system wrote (here: another
+        // company's code C002) — nothing has to be edited in it
         String csv = """
                 company_id;operation_id;operation_date;amount;direction;counterparty_inn;counterparty_name;payment_purpose;balance_eod
-                X77;X77-1;01.10.2024 0:00;1200.00;Поступление;98524470;ПАО «Банк»;Оплата;998800.00
-                X77;X77-2;02.10.2024 0:00;200.00;Списание;98524470;ПАО «Банк»;Комиссия;998600.00
+                C002;X77-1;01.10.2024 0:00;1200.00;Поступление;98524470;ПАО «Банк»;Оплата;998800.00
+                C002;X77-2;02.10.2024 0:00;200.00;Списание;98524470;ПАО «Банк»;Комиссия;998600.00
                 ;;;;;;;;
                 """;
         MockMultipartFile file = new MockMultipartFile(
@@ -263,6 +270,64 @@ class OperationsIntegrationTest {
     }
 
     @Test
+    void newCompanyTakesOnlyItsOwnRowsFromAFileWithSeveralCompanies() throws Exception {
+        String inn = "5559876543";
+        mockMvc.perform(put("/api/users/me/inns")
+                        .header("Authorization", "Bearer " + userAToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("inns", List.of(inn)))))
+                .andExpect(status().isOk());
+        String code = companyCode(inn);
+
+        String csv = "company_id;operation_id;operation_date;amount;direction\n"
+                + code + ";M-1;2024-10-01;100;Поступление\n"
+                + "C001;M-2;2024-10-01;100;Поступление\n"
+                + "C002;M-3;2024-10-01;100;Поступление\n";
+        MvcResult result = mockMvc.perform(multipart("/api/companies/" + inn + "/operations/csv")
+                        .file(new MockMultipartFile("file", "m.csv", "text/csv", csv.getBytes(StandardCharsets.UTF_8)))
+                        .header("Authorization", "Bearer " + userAToken))
+                .andExpect(status().isOk()).andReturn();
+        ImportResult imported = objectMapper.readValue(result.getResponse().getContentAsString(), ImportResult.class);
+        assertThat(imported.getInserted()).isEqualTo(1);
+        assertThat(imported.getSkipped()).isEqualTo(2);
+        assertThat(imported.getErrors().get(0)).contains("несколько компаний").contains(code);
+    }
+
+    @Test
+    void unknownInnPresentInCsvIsMatchedByCompanyInnColumnOnBothEndpoints() throws Exception {
+        String inn = "0055512345";
+        mockMvc.perform(put("/api/users/me/inns")
+                        .header("Authorization", "Bearer " + userAToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("inns", List.of(inn)))))
+                .andExpect(status().isOk());
+
+        String csv = "company_inn;operation_id;operation_date;amount;direction;payment_purpose\n"
+                + inn + ";N-1;01.10.2024;100,50;Поступление;Оплата\n"
+                + inn + ";N-2;02.10.2024;40;Списание;Аренда\n"
+                + "0099999999;N-3;02.10.2024;10;Списание;Чужая компания\n";
+
+        // multi-company endpoint: the foreign INN is skipped, the user's INN is imported
+        MvcResult multi = mockMvc.perform(multipart("/api/operations/csv")
+                        .file(new MockMultipartFile("file", "n.csv", "text/csv", csv.getBytes(StandardCharsets.UTF_8)))
+                        .header("Authorization", "Bearer " + userAToken))
+                .andExpect(status().isOk()).andReturn();
+        ImportResult first = objectMapper.readValue(multi.getResponse().getContentAsString(), ImportResult.class);
+        assertThat(first.getInserted()).isEqualTo(2);
+        assertThat(first.getSkipped()).isEqualTo(1);
+
+        // the same file again through the company endpoint: now they are duplicates
+        MvcResult single = mockMvc.perform(multipart("/api/companies/" + inn + "/operations/csv")
+                        .file(new MockMultipartFile("file", "n.csv", "text/csv", csv.getBytes(StandardCharsets.UTF_8)))
+                        .header("Authorization", "Bearer " + userAToken))
+                .andExpect(status().isOk()).andReturn();
+        ImportResult second = objectMapper.readValue(single.getResponse().getContentAsString(), ImportResult.class);
+        assertThat(second.getInserted()).isZero();
+        assertThat(second.getDuplicates()).isEqualTo(2);
+        assertThat(second.getSkipped()).isEqualTo(1);
+    }
+
+    @Test
     void companyCsvWithForeignCompanyIdIsSkippedBeforeDuplicateCheck() throws Exception {
         linkInn(userAToken);
 
@@ -288,6 +353,13 @@ class OperationsIntegrationTest {
         assertThat(imported.getSkipped()).isEqualTo(1);
         assertThat(imported.getErrors()).hasSize(1);
         assertThat(imported.getErrors().get(0)).contains("C002").contains(KNOWN_INN);
+    }
+
+    private String companyCode(String inn) throws Exception {
+        MvcResult r = mockMvc.perform(get("/api/companies/" + inn)
+                        .header("Authorization", "Bearer " + userAToken))
+                .andExpect(status().isOk()).andReturn();
+        return objectMapper.readTree(r.getResponse().getContentAsString()).get("companyCode").asText();
     }
 
     private OperationDto sampleOperation(String operationId) {

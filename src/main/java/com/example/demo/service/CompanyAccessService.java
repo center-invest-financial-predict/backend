@@ -47,7 +47,9 @@ public class CompanyAccessService {
         for (String inn : requested) {
             if (!ensureKnownCompany(inn)) {
                 // a company the system has not seen yet: register it so the user can upload a CSV and work with it
-                companyRepository.save(new Company(inn, externalCompanyCode(inn), "Компания " + inn, null, null));
+                Company created = new Company(inn, nextCompanyCode(), "Компания " + inn, null, null);
+                created.setUserCreated(true);
+                companyRepository.save(created);
             }
         }
     }
@@ -78,11 +80,12 @@ public class CompanyAccessService {
 
         Company stub = new Company(
                 normalized,
-                externalCompanyCode(normalized),
+                nextCompanyCode(),
                 name,
                 null,
                 null
         );
+        stub.setUserCreated(true);
         companyRepository.save(stub);
         return true;
     }
@@ -101,14 +104,17 @@ public class CompanyAccessService {
         }
     }
 
-    public static String externalCompanyCode(String inn) {
-        String digits = inn.replaceAll("\\D", "");
-        if (digits.isEmpty()) {
-            digits = Integer.toUnsignedString(inn.hashCode());
+    /**
+     * The next free company code of the C001, C002, ... family (C151 after C150). A company the system learns about
+     * gets one, so a statement can name it in its {@code company_id} column like any other company.
+     */
+    public synchronized String nextCompanyCode() {
+        int max = 0;
+        for (String code : companyRepository.findCodesStartingWithC()) {
+            if (code != null && code.matches("C\\d{1,8}")) {
+                max = Math.max(max, Integer.parseInt(code.substring(1)));
+            }
         }
-        if (digits.length() >= 9) {
-            return "E" + digits.substring(digits.length() - 9);
-        }
-        return "E" + ("000000000" + digits).substring(digits.length());
+        return String.format("C%03d", max + 1);
     }
 }
