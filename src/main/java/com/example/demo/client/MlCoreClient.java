@@ -22,7 +22,7 @@ import java.util.Map;
 import java.util.function.Supplier;
 
 /**
- * HTTP client of the "Cashflow ML Core" server (forecast stub, scenario chat, table/receipt import).
+ * HTTP client of the "Cashflow ML Core" server (forecasting, scenario chat, table/receipt import).
  * Every call has connect and read timeouts and fails with {@link MlCoreException} - never hangs, never
  * throws anything else, so callers can degrade gracefully.
  * <p>

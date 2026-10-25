@@ -1,13 +1,10 @@
 services:
   postgres:
     image: postgres:16
-    container_name: hackathon-postgres
     environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    ports:
-      - "5433:5432"
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -19,17 +16,14 @@ services:
 
   postgres-onec:
     image: postgres:16
-    container_name: hackathon-postgres-onec
     environment:
       POSTGRES_DB: onec
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-    ports:
-      - "5434:5432"
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     volumes:
       - postgres_onec_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d onec"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d onec"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -37,17 +31,14 @@ services:
 
   postgres-gos:
     image: postgres:16
-    container_name: hackathon-postgres-gos
     environment:
       POSTGRES_DB: gos
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-    ports:
-      - "5435:5432"
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     volumes:
       - postgres_gos_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d gos"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d gos"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -55,17 +46,14 @@ services:
 
   redis:
     image: redis:7
-    container_name: hackathon-redis
     command: >
       sh -c "if [ -n \"$${REDIS_PASSWORD}\" ]; then redis-server --requirepass \"$${REDIS_PASSWORD}\"; else redis-server; fi"
     environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
-    ports:
-      - "6379:6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD-SHELL", "if [ -n \"$$REDIS_PASSWORD\" ]; then redis-cli -a \"$$REDIS_PASSWORD\" ping; else redis-cli ping; fi"]
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -75,21 +63,18 @@ services:
     build:
       context: ./1C/1C
       dockerfile: Dockerfile
-    container_name: hackathon-onec
     environment:
       DATA_DIR: /data
       POSTGRES_HOST: postgres-onec
       POSTGRES_PORT: 5432
       POSTGRES_DB: onec
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       BACKEND_URL: http://app:8080
-      INTEGRATION_API_KEY: ${INTEGRATION_API_KEY:-dev-integration-key}
-      SEED_COMPANY_CODES: C001,C002,C003
+      INTEGRATION_API_KEY: ${INTEGRATION_API_KEY:?Set INTEGRATION_API_KEY in .env}
+      SEED_COMPANY_CODES: ${SEED_COMPANY_CODES:-C001,C002,C003}
     volumes:
       - ./data:/data:ro
-    ports:
-      - "8081:8081"
     depends_on:
       postgres-onec:
         condition: service_healthy
@@ -99,21 +84,18 @@ services:
     build:
       context: ./Gos_service
       dockerfile: Dockerfile
-    container_name: hackathon-gos
     environment:
       DATA_DIR: /data
       POSTGRES_HOST: postgres-gos
       POSTGRES_PORT: 5432
       POSTGRES_DB: gos
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       BACKEND_URL: http://app:8080
-      INTEGRATION_API_KEY: ${INTEGRATION_API_KEY:-dev-integration-key}
-      SEED_COMPANY_CODES: C001,C002,C003
+      INTEGRATION_API_KEY: ${INTEGRATION_API_KEY:?Set INTEGRATION_API_KEY in .env}
+      SEED_COMPANY_CODES: ${SEED_COMPANY_CODES:-C001,C002,C003}
     volumes:
       - ./data:/data:ro
-    ports:
-      - "8082:8082"
     depends_on:
       postgres-gos:
         condition: service_healthy
@@ -123,34 +105,19 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: hackathon-app
+    env_file: .env
     environment:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
-      APP_ADMIN_EMAIL: ${APP_ADMIN_EMAIL:-admin@example.com}
-      APP_ADMIN_PASSWORD: ${APP_ADMIN_PASSWORD:-admin123}
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRATION: ${JWT_EXPIRATION:-86400000}
-      JWT_REFRESH_EXPIRATION: ${JWT_REFRESH_EXPIRATION:-604800000}
-      ML_SERVICE_URL: http://ml-service:8000
-      ML_CORE_URL: ${ML_CORE_URL:-http://192.168.31.206:18081}
+      ML_CORE_URL: ${ML_CORE_URL:-http://ml-core:8000}
       ML_CORE_ENABLED: ${ML_CORE_ENABLED:-true}
       FORECAST_SOURCE: ${FORECAST_SOURCE:-auto}
       ASSISTANT_PROVIDER: ${ASSISTANT_PROVIDER:-ml-core}
-      LLM_BASE_URL: ${LLM_BASE_URL:-http://192.168.31.206:9931/v1}
-      LLM_API_KEY: ${LLM_API_KEY:-ollama}
-      LLM_MODEL: ${LLM_MODEL:-unsloth/Qwen3.5-9B-GGUF:UD-Q5_K_XL}
       ONEC_URL: http://onec:8081
       GOS_URL: http://gos-service:8082
-      INTEGRATION_API_KEY: ${INTEGRATION_API_KEY:-dev-integration-key}
-    ports:
-      - "8080:8080"
+      INTEGRATION_API_KEY: ${INTEGRATION_API_KEY:?Set INTEGRATION_API_KEY in .env}
     depends_on:
       postgres:
         condition: service_healthy
@@ -160,8 +127,23 @@ services:
         condition: service_started
       gos-service:
         condition: service_started
-    env_file:
-      - .env
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    networks: [app-net]
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    ports:
+      - "${HOST_BIND_ADDRESS:-192.168.31.206}:80:80"
+    depends_on:
+      app:
+        condition: service_healthy
     networks: [app-net]
 
 volumes:
@@ -173,3 +155,4 @@ volumes:
 networks:
   app-net:
     external: true
+    name: app-net

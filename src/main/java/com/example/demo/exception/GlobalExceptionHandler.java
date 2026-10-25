@@ -1,6 +1,5 @@
 package com.example.demo.exception;
 
-import com.example.demo.client.MlServiceClient;
 import org.springframework.dao.InvalidDataAccessApiUsageException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -10,7 +9,6 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
-import org.springframework.web.client.HttpStatusCodeException;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -120,18 +118,4 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(body);
     }
 
-    @ExceptionHandler(MlServiceClient.MlServiceException.class)
-    public ResponseEntity<Map<String, Object>> handleMlService(MlServiceClient.MlServiceException ex) {
-        Throwable cause = ex.getCause();
-        if (cause instanceof HttpStatusCodeException httpEx) {
-            return ResponseEntity.status(httpEx.getStatusCode()).body(Map.of(
-                    "error", "ML service error",
-                    "message", httpEx.getResponseBodyAsString()
-            ));
-        }
-        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(Map.of(
-                "error", "ML service unavailable",
-                "message", ex.getMessage()
-        ));
-    }
 }

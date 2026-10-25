@@ -116,6 +116,8 @@ class MlCoreServiceTest {
         assertThat(cap.getValue().asOfDate()).isEqualTo(AS_OF);
         assertThat(cap.getValue().operations()).hasSize(2); // zero-amount row is not sent
         assertThat(cap.getValue().operations().get(0).companyId()).isEqualTo("C001");
+        assertThat(cap.getValue().industry()).isEqualTo("Торговля");
+        assertThat(cap.getValue().legalForm()).isEqualTo("ООО");
         assertThat(cap.getValue().operations().get(0).direction()).isEqualTo("Поступление");
 
         assertThat(r.source()).isEqualTo("ml-core");

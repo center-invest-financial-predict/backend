@@ -39,7 +39,7 @@ public record DashboardResponse(
         List<String> warnings,
         /** Who calculated the forecast: {@code builtin} or {@code ml-core}. */
         String source,
-        /** Why the source is what it is (e.g. the ML Core server answered with a stub); null when nothing to explain. */
+        /** Why the source is what it is (e.g. ML Core returned a stub or unsupported risk estimate); null otherwise. */
         String sourceNote
 ) {
 }

@@ -8,14 +8,12 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * Raw answer of the ML Core forecast for one company. It is shown only by
- * {@code GET /api/ml/core/companies/{inn}/forecast} and is never mixed into the dashboard,
- * chart, alerts or assistant (those use the built-in engine, see {@code usedOnScreens}).
+ * Raw answer of the ML Core forecast for one company, returned separately by
+ * {@code GET /api/ml/core/companies/{inn}/forecast} for diagnostics and comparison.
  *
  * @param source         always {@code ml-core}
- * @param stub           the server marks its forecast as a stub (demo replay of the last days); such numbers
- *                       are not a real prediction and carry no probability
- * @param usedOnScreens  always false: numbers of the other screens come from the built-in engine
+ * @param stub           true when the ML Core explicitly marks the response as a stub
+ * @param usedOnScreens  false because this raw response is separate; dashboard requests independently select a source
  */
 public record MlCoreForecastResponse(
         String source,

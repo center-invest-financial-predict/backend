@@ -61,12 +61,14 @@ class MlCoreClientTest {
                 .andExpect(jsonPath("$.operations[0].amount").value(1000.5))
                 .andExpect(jsonPath("$.as_of_date").value("2026-09-30"))
                 .andExpect(jsonPath("$.opening_balance").value(50000))
+                .andExpect(jsonPath("$.industry").value("Торговля"))
+                .andExpect(jsonPath("$.legal_form").value("ООО"))
                 .andRespond(withSuccess(FORECAST_JSON, MediaType.APPLICATION_JSON));
 
         MlCoreApi.ForecastResult r = client.forecast(new MlCoreApi.ForecastRequest(
                 List.of(new MlCoreApi.Operation("C001", "o1", LocalDate.of(2026, 9, 30), new BigDecimal("1000.50"),
                         "Поступление", null, "ООО Тест", "Оплата", null)),
-                LocalDate.of(2026, 9, 30), new BigDecimal("50000")));
+                LocalDate.of(2026, 9, 30), new BigDecimal("50000"), "Торговля", "ООО"));
 
         server.verify();
         assertThat(r.isStub()).isTrue();

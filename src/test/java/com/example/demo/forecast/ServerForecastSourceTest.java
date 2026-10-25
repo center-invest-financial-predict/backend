@@ -1,6 +1,7 @@
 package com.example.demo.forecast;
 
 import com.example.demo.client.MlCoreClient;
+import com.example.demo.entity.Company;
 import com.example.demo.forecast.ForecastTypes.DayPoint;
 import com.example.demo.forecast.ForecastTypes.Run;
 import com.example.demo.repository.CompanyRepository;
@@ -18,6 +19,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.client.ExpectedCount.once;
@@ -40,6 +42,8 @@ class ServerForecastSourceTest {
         server = MockRestServiceServer.bindTo(fast).build();
         MlCoreClient client = new MlCoreClient(true, BASE, fast.build(), RestClient.builder().baseUrl(BASE).build());
         CompanyRepository companies = Mockito.mock(CompanyRepository.class);
+        Mockito.when(companies.findById(INN)).thenReturn(
+                Optional.of(new Company(INN, "C001", "ООО Тест", "ООО", "Торговля")));
         return new ForecastFixture(ops -> new ServerForecastSource(client, ops, companies, mode, 365));
     }
 
@@ -90,6 +94,8 @@ class ServerForecastSourceTest {
         server.expect(once(), requestTo(BASE + "/v1/forecasts"))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(jsonPath("$.as_of_date").value(reference.asOf().toString()))
+                .andExpect(jsonPath("$.industry").value("Торговля"))
+                .andExpect(jsonPath("$.legal_form").value("ООО"))
                 .andExpect(jsonPath("$.operations[0].direction").exists())
                 .andRespond(withSuccess(serverAnswer(reference, false, 0.37, shift, 0), MediaType.APPLICATION_JSON));
 

@@ -39,8 +39,9 @@ public class MlCoreController {
 
     @GetMapping("/ml/core/companies/{inn}/forecast")
     @Operation(summary = "Raw ML Core forecast for a company (separate from the built-in forecast used on all screens)",
-            description = "source=ml-core. While the server marks its forecast as stub (stub=true) these numbers are a "
-                    + "demo replay, carry no probability and are NOT used by dashboard/chart/alerts/assistant.")
+            description = "Returns the ML Core forecast snapshot for inspection. The dashboard adopts ML Core values "
+                    + "only when the response is non-stub, includes a supported cash-gap probability, and matches the "
+                    + "requested horizon; otherwise it falls back to the built-in forecast.")
     public ResponseEntity<MlCoreForecastResponse> forecast(@PathVariable String inn, Authentication authentication) {
         companyAccessService.ensureOwnedByUser(authentication.getName(), inn);
         return ResponseEntity.ok(mlCoreService.forecast(inn));

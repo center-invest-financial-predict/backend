@@ -42,12 +42,7 @@ spring:
         model: ${LLM_MODEL:unsloth/Qwen3.5-9B-GGUF:UD-Q5_K_XL}
 
 ml:
-  # Legacy contract (docs/ml-forecast-openapi.yaml: /forecast, /inference): NOT served by the ML Core server.
-  service:
-    url: ${ML_SERVICE_URL:http://localhost:8000}
-    timeout: 5000
-    connect-timeout: 2000
-  # "Cashflow ML Core" (FastAPI, /docs): /v1/forecasts (stub), /v1/chat, /v1/imports/*, /health/*
+  # "Cashflow ML Core" (FastAPI): /v1/forecasts, /v1/chat, /v1/imports/*, /health/*
   core:
     enabled: ${ML_CORE_ENABLED:true}
     url: ${ML_CORE_URL:http://192.168.31.206:18081}

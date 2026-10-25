@@ -36,9 +36,9 @@ import java.util.UUID;
  * Everything the backend does with the "Cashflow ML Core" server:
  * health, a labelled (separate) forecast, and LLM-assisted import preview of tables and receipts.
  * <p>
- * The ML Core forecast is deliberately NOT part of the cached forecast {@code Run}: at the time of writing the server
- * answers with {@code is_stub=true} (a replay of the last 28 days, no probability, no uncertainty band), so every
- * screen keeps using the built-in engine and this service only exposes the raw ML Core answer for comparison.
+ * This service exposes the raw ML Core answer for diagnostics and comparison. The dashboard forecast is assembled by
+ * {@link com.example.demo.forecast.ServerForecastSource}, which adopts supported ML Core forecasts and otherwise
+ * falls back to the built-in engine.
  */
 @Service
 @RequiredArgsConstructor
@@ -107,7 +107,8 @@ public class MlCoreService {
             throw new com.example.demo.exception.InsufficientHistoryException("ml-core", 1, 0);
         }
 
-        MlCoreApi.ForecastResult r = client.forecast(new MlCoreApi.ForecastRequest(payload, asOf, inputs.startBalance()));
+        MlCoreApi.ForecastResult r = client.forecast(new MlCoreApi.ForecastRequest(payload, asOf,
+                inputs.startBalance(), company.getIndustry(), company.getLegalForm()));
         return toResponse(inn, r, payload.size());
     }
 

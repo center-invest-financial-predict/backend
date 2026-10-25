@@ -140,7 +140,8 @@ public class ServerForecastSource {
         if (payload.isEmpty()) {
             throw new IllegalStateException("нет операций для отправки");
         }
-        return new MlCoreApi.ForecastRequest(payload, in.asOf(), in.startBalance());
+        return new MlCoreApi.ForecastRequest(payload, in.asOf(), in.startBalance(),
+                company == null ? null : company.getIndustry(), company == null ? null : company.getLegalForm());
     }
 
     /**

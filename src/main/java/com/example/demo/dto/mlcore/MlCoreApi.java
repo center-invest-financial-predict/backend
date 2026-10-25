@@ -19,15 +19,20 @@ public final class MlCoreApi {
     private MlCoreApi() {
     }
 
-    /** {@code POST /v1/forecasts}. */
+    /** {@code POST /v1/forecasts}; optional company context is forwarded to the model. */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record ForecastRequest(
             @JsonProperty("operations") List<Operation> operations,
             @JsonProperty("as_of_date")
             @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd")
             LocalDate asOfDate,
-            @JsonProperty("opening_balance") BigDecimal openingBalance
+            @JsonProperty("opening_balance") BigDecimal openingBalance,
+            @JsonProperty("industry") String industry,
+            @JsonProperty("legal_form") String legalForm
     ) {
+        public ForecastRequest(List<Operation> operations, LocalDate asOfDate, BigDecimal openingBalance) {
+            this(operations, asOfDate, openingBalance, null, null);
+        }
     }
 
     /** Statement row. {@code direction} is the Russian label ("Поступление" / "Списание"), amount is positive. */
