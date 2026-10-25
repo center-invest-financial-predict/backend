@@ -61,13 +61,48 @@ class OperationsIntegrationTest {
     }
 
     @Test
-    void rejectsUnknownInnOnPut() throws Exception {
+    void rejectsMalformedInnOnPut() throws Exception {
         mockMvc.perform(put("/api/users/me/inns")
                         .header("Authorization", "Bearer " + userAToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(Map.of("inns", List.of("0000000000")))))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.unknownInns[0]").value("0000000000"));
+                        .content(objectMapper.writeValueAsString(Map.of("inns", List.of("12ab56")))))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void unknownInnIsRegisteredAndUserCanUploadCsvForIt() throws Exception {
+        String inn = "5551234567";
+        mockMvc.perform(put("/api/users/me/inns")
+                        .header("Authorization", "Bearer " + userAToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("inns", List.of(inn)))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.inns[0]").value(inn));
+
+        String csv = """
+                company_id;operation_id;operation_date;amount;direction;counterparty_inn;counterparty_name;payment_purpose;balance_eod
+                X77;X77-1;01.10.2024 0:00;1200.00;Поступление;98524470;ПАО «Банк»;Оплата;998800.00
+                X77;X77-2;02.10.2024 0:00;200.00;Списание;98524470;ПАО «Банк»;Комиссия;998600.00
+                ;;;;;;;;
+                """;
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "new.csv", "text/csv", csv.getBytes(java.nio.charset.Charset.forName("windows-1251")));
+        MvcResult upload = mockMvc.perform(multipart("/api/companies/" + inn + "/operations/csv")
+                        .file(file)
+                        .header("Authorization", "Bearer " + userAToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        ImportResult imported = objectMapper.readValue(upload.getResponse().getContentAsString(), ImportResult.class);
+        assertThat(imported.getInserted()).isEqualTo(2);
+        assertThat(imported.getInvalid()).isZero();
+        assertThat(imported.getSkipped()).isZero();
+
+        MvcResult list = mockMvc.perform(get("/api/companies/" + inn + "/operations")
+                        .header("Authorization", "Bearer " + userAToken).param("size", "100"))
+                .andExpect(status().isOk())
+                .andReturn();
+        assertThat(objectMapper.readTree(list.getResponse().getContentAsString()).get("totalElements").asInt())
+                .isEqualTo(2);
     }
 
     @Test
@@ -225,6 +260,34 @@ class OperationsIntegrationTest {
 
         JsonNode page = listOperations(userAToken);
         assertThat(page.get("totalElements").asInt()).isEqualTo(2);
+    }
+
+    @Test
+    void companyCsvWithForeignCompanyIdIsSkippedBeforeDuplicateCheck() throws Exception {
+        linkInn(userAToken);
+
+        String csv = """
+                company_id;operation_id;operation_date;amount;direction;counterparty_inn;counterparty_name;payment_purpose;balance_eod
+                C002;C002-FOREIGN-1;01.10.2024 0:00;1200.00;Поступление;98524470;ПАО «Банк»;Комиссия;998800.00
+                ;;;;;;;;
+                ;;;;;;;;
+                """;
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "foreign.csv", "text/csv", csv.getBytes(java.nio.charset.Charset.forName("windows-1251"))
+        );
+
+        MvcResult result = mockMvc.perform(multipart("/api/companies/" + KNOWN_INN + "/operations/csv")
+                        .file(file)
+                        .header("Authorization", "Bearer " + userAToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        ImportResult imported = objectMapper.readValue(result.getResponse().getContentAsString(), ImportResult.class);
+        assertThat(imported.getInserted()).isZero();
+        assertThat(imported.getDuplicates()).isZero();
+        assertThat(imported.getInvalid()).isZero();
+        assertThat(imported.getSkipped()).isEqualTo(1);
+        assertThat(imported.getErrors()).hasSize(1);
+        assertThat(imported.getErrors().get(0)).contains("C002").contains(KNOWN_INN);
     }
 
     private OperationDto sampleOperation(String operationId) {

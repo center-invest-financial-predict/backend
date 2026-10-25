@@ -34,14 +34,21 @@ public class CompanyAccessService {
             }
         }
 
-        List<String> unknown = new ArrayList<>();
+        List<String> malformed = new ArrayList<>();
         for (String inn : requested) {
-            if (!ensureKnownCompany(inn)) {
-                unknown.add(inn);
+            if (!inn.matches("\\d{5,20}")) {
+                malformed.add(inn);
             }
         }
-        if (!unknown.isEmpty()) {
-            throw new UnknownInnException(unknown);
+        if (!malformed.isEmpty()) {
+            throw new IllegalArgumentException("INN must consist of digits only: " + String.join(", ", malformed));
+        }
+
+        for (String inn : requested) {
+            if (!ensureKnownCompany(inn)) {
+                // a company the system has not seen yet: register it so the user can upload a CSV and work with it
+                companyRepository.save(new Company(inn, externalCompanyCode(inn), "Компания " + inn, null, null));
+            }
         }
     }
 

@@ -60,6 +60,20 @@ class CsvOperationParserTest {
     }
 
     @Test
+    void ignoresEmptySemicolonRowsAndParsesDateWithTime() throws Exception {
+        String csv = "company_id;operation_id;operation_date;amount;direction;counterparty_inn;counterparty_name;payment_purpose;balance_eod\r\n"
+                + "C002;C002-000001;01.10.2024 0:00;1200.00;Поступление;98524470;ПАО «Банк»;Комиссия;998800.00\r\n"
+                + ";;;;;;;;\r\n;;;;;;;;\r\n;;;;;;;;\r\n";
+
+        CsvOperationParser.ParseResult result = parser.parse(
+                new ByteArrayInputStream(csv.getBytes(java.nio.charset.Charset.forName("windows-1251"))));
+
+        assertThat(result.invalid()).isZero();
+        assertThat(result.operations()).hasSize(1);
+        assertThat(result.operations().get(0).getOperationDate()).isEqualTo(java.time.LocalDate.of(2024, 10, 1));
+    }
+
+    @Test
     void parsesRussianHeadersAndDerivesDirectionFromSign() throws Exception {
         String csv = "sep=;\n№;Дата;Сумма;Контрагент\n1;01.10.2024;-100,5;A\n2;02.10.2024;50;B\n";
 
