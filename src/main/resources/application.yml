@@ -34,9 +34,8 @@ spring:
       max-request-size: 100MB
   ai:
     openai:
-      # OpenAI-compatible LLM endpoint of the assistant. The ML Core server (ml.core.url) has no /v1/chat/completions,
-      # so the assistant keeps talking to this endpoint.
-      base-url: ${LLM_BASE_URL:http://192.168.31.206:9931/v1}
+      # The fallback assistant client talks to the llama.cpp service on app-net.
+      base-url: ${LLM_BASE_URL:http://llm:8080/v1}
       api-key: ${LLM_API_KEY:ollama}
       chat:
         model: ${LLM_MODEL:unsloth/Qwen3.5-9B-GGUF:UD-Q5_K_XL}
