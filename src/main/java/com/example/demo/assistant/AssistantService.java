@@ -53,6 +53,8 @@ public class AssistantService {
             """;
 
     private static final Pattern THINK = Pattern.compile("(?s)<think>.*?</think>");
+    private static final Pattern SCENARIO_ACTION = Pattern.compile(
+            "(?iu)(что\\s+если|сценар|добав|перенес|отлож|увелич|уменьш|сниз|задерж|внеплан|позже|не\\s+оплач|исключи)");
 
     private final ChatClient chatClient;
     private final AssistantContextBuilder contextBuilder;
@@ -187,8 +189,8 @@ public class AssistantService {
 
     /** Streaming variant (SSE text chunks). Falls back to the deterministic summary if the LLM fails. */
     public Flux<String> stream(String email, String inn, AskRequest request) {
-        if (useMlCore()) {
-            // The server answers in one piece: same chain as /ask (ML Core -> local LLM -> summary), one chunk.
+        if (useMlCore() && SCENARIO_ACTION.matcher(request.question()).find()) {
+            // Scenario changes need the structured ML Core response; return that answer as one SSE chunk.
             return Mono.fromCallable(() -> ask(email, inn, request).answer())
                     .subscribeOn(Schedulers.boundedElastic())
                     .flux();
